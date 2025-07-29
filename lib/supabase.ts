@@ -79,8 +79,10 @@ export class DatabaseService {
   }
 
   static async validateAccessCode(code: string, ipAddress?: string): Promise<{ valid: boolean; message: string; accessCode?: AccessCode }> {
+    this.checkSupabaseClient()
+    
     // Get the access code
-    const { data: accessCode, error } = await supabase
+    const { data: accessCode, error } = await supabase!
       .from('access_codes')
       .select('*')
       .eq('code', code.toUpperCase())
@@ -89,6 +91,11 @@ export class DatabaseService {
 
     if (error || !accessCode) {
       return { valid: false, message: 'Invalid access code' }
+    }
+
+    // Check if already used (one-time use enforcement)
+    if (accessCode.used_at) {
+      return { valid: false, message: 'Access code has already been used and cannot be reused' }
     }
 
     // Check if expired
@@ -101,17 +108,18 @@ export class DatabaseService {
       return { valid: false, message: 'Access code has expired' }
     }
 
-    // Mark as used
-    await supabase
+    // Mark as used and deactivate for one-time use
+    await supabase!
       .from('access_codes')
       .update({
         used_at: now.toISOString(),
-        used_by: ipAddress || 'unknown'
+        used_by: ipAddress || 'unknown',
+        is_active: false  // Deactivate after use for one-time functionality
       })
       .eq('code', code.toUpperCase())
 
     // Log the usage
-    await this.addUsageLog(code, 'used', `Used by ${ipAddress || 'unknown'}`)
+    await this.addUsageLog(code, 'used', `Used by ${ipAddress || 'unknown'} - One-time use`)
 
     return { valid: true, message: 'Access code validated successfully', accessCode }
   }
@@ -121,7 +129,9 @@ export class DatabaseService {
   }
 
   static async deactivateAccessCode(code: string, reason: 'expired' | 'revoked'): Promise<void> {
-    const { error } = await supabase
+    this.checkSupabaseClient()
+    
+    const { error } = await supabase!
       .from('access_codes')
       .update({ is_active: false })
       .eq('code', code.toUpperCase())
@@ -134,7 +144,9 @@ export class DatabaseService {
   }
 
   static async getActiveCodes(): Promise<AccessCode[]> {
-    const { data, error } = await supabase
+    this.checkSupabaseClient()
+    
+    const { data, error } = await supabase!
       .from('access_codes')
       .select('*')
       .eq('is_active', true)
@@ -148,7 +160,9 @@ export class DatabaseService {
   }
 
   static async getTotalCodesCount(): Promise<number> {
-    const { count, error } = await supabase
+    this.checkSupabaseClient()
+    
+    const { count, error } = await supabase!
       .from('access_codes')
       .select('*', { count: 'exact', head: true })
 
@@ -161,7 +175,9 @@ export class DatabaseService {
 
   // Usage Logs Operations
   static async addUsageLog(code: string, action: UsageLog['action'], details?: string, ipAddress?: string): Promise<void> {
-    const { error } = await supabase
+    this.checkSupabaseClient()
+    
+    const { error } = await supabase!
       .from('usage_logs')
       .insert({
         code: code.toUpperCase(),
@@ -178,7 +194,9 @@ export class DatabaseService {
   }
 
   static async getUsageLogs(limit: number = 50): Promise<UsageLog[]> {
-    const { data, error } = await supabase
+    this.checkSupabaseClient()
+    
+    const { data, error } = await supabase!
       .from('usage_logs')
       .select('*')
       .order('timestamp', { ascending: false })
@@ -193,10 +211,12 @@ export class DatabaseService {
 
   // Cleanup Operations
   static async cleanupExpiredCodes(): Promise<number> {
+    this.checkSupabaseClient()
+    
     const now = new Date().toISOString()
     
     // Get expired codes that are still active
-    const { data: expiredCodes, error: fetchError } = await supabase
+    const { data: expiredCodes, error: fetchError } = await supabase!
       .from('access_codes')
       .select('code')
       .eq('is_active', true)
@@ -211,7 +231,7 @@ export class DatabaseService {
     }
 
     // Deactivate expired codes
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabase!
       .from('access_codes')
       .update({ is_active: false })
       .eq('is_active', true)
@@ -247,7 +267,9 @@ export class DatabaseService {
 
   // Real-time subscriptions
   static subscribeToAccessCodes(callback: (payload: any) => void) {
-    return supabase
+    this.checkSupabaseClient()
+    
+    return supabase!
       .channel('access_codes_changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'access_codes' }, 
@@ -257,7 +279,9 @@ export class DatabaseService {
   }
 
   static subscribeToUsageLogs(callback: (payload: any) => void) {
-    return supabase
+    this.checkSupabaseClient()
+    
+    return supabase!
       .channel('usage_logs_changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'usage_logs' }, 

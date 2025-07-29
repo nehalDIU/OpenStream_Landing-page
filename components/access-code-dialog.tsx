@@ -61,13 +61,9 @@ export const AccessCodeDialog = memo(function AccessCodeDialog({ open, onOpenCha
         })
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
       const data = await response.json()
 
-      if (data.valid) {
+      if (response.ok && data.valid) {
         toast.success("Access code validated successfully!", {
           description: "Connecting to premium servers..."
         })
@@ -76,7 +72,8 @@ export const AccessCodeDialog = memo(function AccessCodeDialog({ open, onOpenCha
         setCode("")
         setError("")
       } else {
-        const errorMessage = data.error || "Invalid access code"
+        // Handle both 400 responses and successful responses with valid: false
+        const errorMessage = data.error || data.message || "Invalid access code"
         setError(errorMessage)
         toast.error(errorMessage, {
           description: "Please check your code and try again"
