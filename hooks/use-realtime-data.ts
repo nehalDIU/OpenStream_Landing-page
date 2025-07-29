@@ -107,8 +107,13 @@ export function useRealtimeData({
   }) => {
     setLoading(true)
     try {
-      const promises = Array.from({ length: options.quantity }, () =>
-        fetch('/api/access-codes', {
+      console.log('=== CODE GENERATION DEBUG ===')
+      console.log('Admin token:', adminToken ? `${adminToken.substring(0, 8)}...` : 'EMPTY')
+      console.log('Options:', options)
+      
+      const promises = Array.from({ length: options.quantity }, (_, index) => {
+        console.log(`Creating request ${index + 1} for duration: ${options.duration}`)
+        return fetch('/api/access-codes', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -119,12 +124,28 @@ export function useRealtimeData({
             duration: options.duration
           })
         })
-      )
+      })
 
+      console.log(`Making ${promises.length} parallel requests...`)
       const responses = await Promise.all(promises)
-      const results = await Promise.all(responses.map(r => r.json()))
+      
+      console.log('Raw responses:', responses.map((r, i) => ({
+        index: i,
+        ok: r.ok,
+        status: r.status,
+        statusText: r.statusText
+      })))
+      
+      const results = await Promise.all(responses.map(async (r, index) => {
+        const json = await r.json()
+        console.log(`Response ${index}:`, { ok: r.ok, status: r.status, data: json })
+        return json
+      }))
       
       const successfulResults = results.filter((result, index) => responses[index].ok)
+      console.log('Successful results:', successfulResults.length, 'out of', results.length)
+      console.log('Failed results:', results.filter((result, index) => !responses[index].ok))
+      
       const generatedCodes = successfulResults.map(result => result.code)
       
       if (successfulResults.length > 0) {
@@ -132,6 +153,7 @@ export function useRealtimeData({
         await fetchData(false) // Refresh data
         return generatedCodes
       } else {
+        console.error('All API calls failed. No codes were generated.')
         throw new Error("No codes generated")
       }
     } catch (error) {
