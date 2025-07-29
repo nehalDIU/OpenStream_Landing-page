@@ -52,10 +52,17 @@ export function Sidebar({ activeTab, onTabChange, stats }: SidebarProps) {
     },
     {
       id: "logs",
+      label: "Recent Logs",
+      icon: Activity,
+      badge: stats?.recentActivity,
+      description: "View recent logs"
+    },
+    {
+      id: "activity-logs",
       label: "Activity Logs",
       icon: Activity,
       badge: stats?.recentActivity,
-      description: "View usage logs"
+      description: "Advanced activity monitoring"
     },
     {
       id: "settings",

@@ -15,6 +15,7 @@ import { Sidebar } from "@/components/admin/sidebar"
 import { StatsCards } from "@/components/admin/stats-cards"
 import { DataTable } from "@/components/admin/data-table"
 import { CodeGenerator } from "@/components/admin/code-generator"
+import { ActivityLogs } from "@/components/admin/activity-logs"
 import {
   Shield,
   Plus,
@@ -432,12 +433,14 @@ export default function AdminPage() {
                   {activeTab === 'overview' && 'Dashboard Overview'}
                   {activeTab === 'codes' && 'Access Codes'}
                   {activeTab === 'logs' && 'Activity Logs'}
+                  {activeTab === 'activity-logs' && 'Activity Logs'}
                   {activeTab === 'settings' && 'Settings'}
                 </h1>
                 <p className="theme-text-secondary text-sm mt-1">
                   {activeTab === 'overview' && 'Monitor system performance and recent activity'}
                   {activeTab === 'codes' && 'Manage and monitor access codes'}
                   {activeTab === 'logs' && 'View detailed activity and usage logs'}
+                  {activeTab === 'activity-logs' && 'Comprehensive activity monitoring with advanced filtering and export capabilities'}
                   {activeTab === 'settings' && 'Configure system settings and preferences'}
                 </p>
               </div>
@@ -531,6 +534,13 @@ export default function AdminPage() {
                   searchPlaceholder="Search activity logs..."
                 />
               </div>
+            )}
+
+            {activeTab === 'activity-logs' && (
+              <ActivityLogs
+                adminToken={adminToken}
+                className="space-y-6"
+              />
             )}
 
             {activeTab === 'settings' && (
