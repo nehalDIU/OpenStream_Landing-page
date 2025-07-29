@@ -41,6 +41,7 @@ interface ActivityLogsFiltersProps {
   filters: ActivityLogFilters
   onFiltersChange: (filters: ActivityLogFilters) => void
   onReset: () => void
+  onClose?: () => void
   className?: string
 }
 
@@ -48,6 +49,7 @@ export function ActivityLogsFilters({
   filters,
   onFiltersChange,
   onReset,
+  onClose,
   className
 }: ActivityLogsFiltersProps) {
   const { resolvedTheme } = useTheme()
@@ -214,7 +216,7 @@ export function ActivityLogsFilters({
               Advanced
               <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
             </Button>
-            
+
             {activeFilterCount > 0 && (
               <Button
                 variant="outline"
@@ -224,6 +226,17 @@ export function ActivityLogsFilters({
               >
                 <RotateCcw className="h-4 w-4 mr-1" />
                 Reset
+              </Button>
+            )}
+
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="theme-button-secondary"
+              >
+                <X className="h-4 w-4" />
               </Button>
             )}
           </div>

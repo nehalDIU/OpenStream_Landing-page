@@ -26,7 +26,8 @@ import {
   ChevronDown,
   ChevronUp,
   MoreHorizontal,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react"
 import { ActivityLogsTable } from "./activity-logs-table"
 import { ActivityLogsFilters } from "./activity-logs-filters"
@@ -71,6 +72,9 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
   // Debounce search to improve performance
   const [searchInput, setSearchInput] = useState("")
   const debouncedSearch = useDebounce(searchInput, 300)
+
+  // Filters visibility state
+  const [showFilters, setShowFilters] = useState(false)
   
   const [state, setState] = useState<ActivityLogsState>({
     logs: [],
@@ -311,7 +315,27 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
       search: "",
       pagination: { ...prev.pagination, page: 1 }
     }))
+    setSearchInput("")
   }, [])
+
+  // Toggle filters visibility
+  const toggleFilters = useCallback(() => {
+    setShowFilters(prev => !prev)
+  }, [])
+
+  // Count active filters
+  const getActiveFilterCount = useCallback(() => {
+    let count = 0
+    if (state.filters.dateRange) count++
+    if (state.filters.activityTypes && Object.values(state.filters.activityTypes).some(Boolean)) count++
+    if (state.filters.searchTerm) count++
+    if (state.filters.users && Object.values(state.filters.users).some(arr => arr.length > 0)) count++
+    if (state.filters.status) count++
+    if (state.filters.codes && state.filters.codes.length > 0) count++
+    return count
+  }, [state.filters])
+
+  const activeFilterCount = getActiveFilterCount()
 
   // Export functionality
   const handleExport = useCallback(async (format: 'csv' | 'json') => {
@@ -378,6 +402,7 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
     [KEYBOARD_SHORTCUTS.REFRESH]: () => fetchLogs(true),
     [KEYBOARD_SHORTCUTS.EXPORT_CSV]: () => handleExport('csv'),
     [KEYBOARD_SHORTCUTS.EXPORT_JSON]: () => handleExport('json'),
+    [KEYBOARD_SHORTCUTS.TOGGLE_FILTERS]: toggleFilters,
     [`Ctrl+${KEYBOARD_SHORTCUTS.SELECT_ALL}`]: handleSelectAll,
     [KEYBOARD_SHORTCUTS.CLEAR_SELECTION]: handleClearSelection
   })
@@ -388,15 +413,54 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
         <AnnouncementRegion />
 
         {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex-1">
           <h2 className="text-2xl font-bold theme-text-primary">Activity Logs</h2>
           <p className="theme-text-secondary">
             Monitor and analyze system activity with advanced filtering and search
           </p>
         </div>
+
+        {/* Quick Search Bar */}
+        <div className="flex items-center gap-3 lg:min-w-96">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 theme-text-secondary" />
+            <Input
+              placeholder="Quick search logs..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-10 theme-input"
+            />
+            {searchInput && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearchInput("")}
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </div>
         
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleFilters}
+            className={`theme-button-secondary ${showFilters ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : ''}`}
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filters
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs flex items-center justify-center">
+                {activeFilterCount}
+              </Badge>
+            )}
+            <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -407,7 +471,7 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
             <RefreshCw className={`h-4 w-4 mr-2 ${state.loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          
+
           <Button
             variant="outline"
             size="sm"
@@ -418,7 +482,7 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          
+
           <Button
             variant="outline"
             size="sm"
@@ -432,12 +496,17 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
         </div>
       </div>
 
-      {/* Filters */}
-      <ActivityLogsFilters
-        filters={state.filters}
-        onFiltersChange={handleFiltersChange}
-        onReset={handleResetFilters}
-      />
+      {/* Collapsible Filters */}
+      {showFilters && (
+        <div className="animate-in slide-in-from-top-2 duration-200">
+          <ActivityLogsFilters
+            filters={state.filters}
+            onFiltersChange={handleFiltersChange}
+            onReset={handleResetFilters}
+            onClose={toggleFilters}
+          />
+        </div>
+      )}
 
       {/* Stats Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -445,7 +514,14 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm theme-text-secondary">Total Logs</p>
+                <p className="text-sm theme-text-secondary">
+                  Total Logs
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      Filtered
+                    </Badge>
+                  )}
+                </p>
                 <p className="text-2xl font-bold theme-text-primary">{state.total.toLocaleString()}</p>
               </div>
               <Activity className="h-8 w-8 theme-text-accent" />
