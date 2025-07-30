@@ -29,6 +29,8 @@ export interface AccessCode {
   used_by?: string
   duration_minutes: number
   created_by?: string
+  prefix?: string
+  auto_expire_on_use?: boolean
 }
 
 export interface UsageLog {
@@ -127,36 +129,76 @@ export class DatabaseService {
   }
 
   // Access Codes Operations
-  static async generateAccessCode(duration: number = 10): Promise<AccessCode> {
+  static async generateAccessCode(
+    duration: number = 10,
+    prefix?: string,
+    autoExpireOnUse: boolean = true
+  ): Promise<AccessCode> {
     this.checkSupabaseClient()
 
-    const code = this.generateSecureCode()
+    const code = this.generateSecureCode(prefix)
     const expiresAt = new Date(Date.now() + duration * 60 * 1000)
 
-    const { data, error } = await supabase!
-      .from('access_codes')
-      .insert({
-        code,
-        expires_at: expiresAt.toISOString(),
-        duration_minutes: duration,
-        is_active: true
-      })
-      .select()
-      .single()
-
-    if (error) {
-      throw new Error(`Failed to generate access code: ${error.message}`)
+    // Check if advanced settings columns exist by trying to insert with them first
+    let insertData: any = {
+      code,
+      expires_at: expiresAt.toISOString(),
+      duration_minutes: duration,
+      is_active: true
     }
 
-    // Log the generation
-    await this.addUsageLog(code, 'generated', `Expires in ${duration} minutes`)
+    // Try to add advanced settings if they exist in the database
+    try {
+      // First attempt with advanced settings
+      const { data, error } = await supabase!
+        .from('access_codes')
+        .insert({
+          ...insertData,
+          prefix: prefix || null,
+          auto_expire_on_use: autoExpireOnUse
+        })
+        .select()
+        .single()
 
-    return data
+      if (error) {
+        // If error is about missing columns, fall back to basic insert
+        if (error.message.includes('auto_expire_on_use') || error.message.includes('prefix')) {
+          console.warn('Advanced settings columns not found, falling back to basic code generation')
+          const { data: fallbackData, error: fallbackError } = await supabase!
+            .from('access_codes')
+            .insert(insertData)
+            .select()
+            .single()
+
+          if (fallbackError) {
+            throw new Error(`Failed to generate access code: ${fallbackError.message}`)
+          }
+
+          // Log the generation with note about missing advanced settings
+          await this.addUsageLog(code, 'generated', `Expires in ${duration} minutes (advanced settings not available)`)
+          return fallbackData
+        } else {
+          throw new Error(`Failed to generate access code: ${error.message}`)
+        }
+      }
+
+      // Log the generation with advanced settings info
+      const settingsInfo = []
+      if (prefix) settingsInfo.push(`prefix: ${prefix}`)
+      if (!autoExpireOnUse) settingsInfo.push('reusable')
+      const settingsStr = settingsInfo.length > 0 ? ` (${settingsInfo.join(', ')})` : ''
+
+      await this.addUsageLog(code, 'generated', `Expires in ${duration} minutes${settingsStr}`)
+      return data
+
+    } catch (error) {
+      throw new Error(`Failed to generate access code: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   static async validateAccessCode(code: string, ipAddress?: string): Promise<{ valid: boolean; message: string; accessCode?: AccessCode }> {
     this.checkSupabaseClient()
-    
+
     // Get the access code
     const { data: accessCode, error } = await supabase!
       .from('access_codes')
@@ -169,33 +211,41 @@ export class DatabaseService {
       return { valid: false, message: 'Invalid access code' }
     }
 
-    // Check if already used (one-time use enforcement)
-    if (accessCode.used_at) {
+    // Check if already used (only for auto-expire codes or if advanced settings not available)
+    const hasAdvancedSettings = accessCode.hasOwnProperty('auto_expire_on_use')
+    const shouldCheckReuse = hasAdvancedSettings ? accessCode.auto_expire_on_use !== false : true // Default to one-time use
+
+    if (accessCode.used_at && shouldCheckReuse) {
       return { valid: false, message: 'Access code has already been used and cannot be reused' }
     }
 
     // Check if expired
     const now = new Date()
     const expiresAt = new Date(accessCode.expires_at)
-    
+
     if (expiresAt < now) {
       // Mark as expired
       await this.deactivateAccessCode(code, 'expired')
       return { valid: false, message: 'Access code has expired' }
     }
 
-    // Mark as used and deactivate for one-time use
+    // Determine if code should be deactivated after use
+    const shouldDeactivate = hasAdvancedSettings ? (accessCode.auto_expire_on_use !== false) : true // Default to true
+
+    // Mark as used and optionally deactivate based on auto_expire_on_use setting
     await supabase!
       .from('access_codes')
       .update({
         used_at: now.toISOString(),
         used_by: ipAddress || 'unknown',
-        is_active: false  // Deactivate after use for one-time functionality
+        is_active: !shouldDeactivate  // Only deactivate if auto_expire_on_use is true
       })
       .eq('code', code.toUpperCase())
 
-    // Log the usage
-    await this.addUsageLog(code, 'used', `Used by ${ipAddress || 'unknown'} - One-time use`)
+    // Log the usage with appropriate message
+    const usageType = shouldDeactivate ? 'One-time use' : 'Reusable'
+    const advancedNote = hasAdvancedSettings ? '' : ' (legacy mode)'
+    await this.addUsageLog(code, 'used', `Used by ${ipAddress || 'unknown'} - ${usageType}${advancedNote}`)
 
     return { valid: true, message: 'Access code validated successfully', accessCode }
   }
@@ -446,18 +496,35 @@ export class DatabaseService {
   }
 
   // Utility Functions
-  static generateSecureCode(): string {
+  static generateSecureCode(prefix?: string): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     let result = ''
-    
-    // Use crypto.getRandomValues for better randomness
-    const array = new Uint8Array(8)
-    crypto.getRandomValues(array)
-    
-    for (let i = 0; i < 8; i++) {
-      result += chars.charAt(array[i] % chars.length)
+
+    // If prefix is provided, use it and generate remaining characters
+    if (prefix && prefix.length > 0) {
+      const cleanPrefix = prefix.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4)
+      result = cleanPrefix
+
+      // Generate remaining characters to make total length 8
+      const remainingLength = 8 - cleanPrefix.length
+      if (remainingLength > 0) {
+        const array = new Uint8Array(remainingLength)
+        crypto.getRandomValues(array)
+
+        for (let i = 0; i < remainingLength; i++) {
+          result += chars.charAt(array[i] % chars.length)
+        }
+      }
+    } else {
+      // Generate full 8-character code without prefix
+      const array = new Uint8Array(8)
+      crypto.getRandomValues(array)
+
+      for (let i = 0; i < 8; i++) {
+        result += chars.charAt(array[i] % chars.length)
+      }
     }
-    
+
     return result
   }
 

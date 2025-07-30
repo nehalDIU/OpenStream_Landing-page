@@ -15,7 +15,9 @@ CREATE TABLE IF NOT EXISTS access_codes (
     used_at TIMESTAMP WITH TIME ZONE,
     used_by VARCHAR(255),
     duration_minutes INTEGER NOT NULL DEFAULT 10,
-    created_by VARCHAR(255) DEFAULT 'admin'
+    created_by VARCHAR(255) DEFAULT 'admin',
+    prefix VARCHAR(4),
+    auto_expire_on_use BOOLEAN DEFAULT TRUE
 );
 
 -- Create usage_logs table
@@ -34,10 +36,16 @@ CREATE INDEX IF NOT EXISTS idx_access_codes_code ON access_codes(code);
 CREATE INDEX IF NOT EXISTS idx_access_codes_active ON access_codes(is_active);
 CREATE INDEX IF NOT EXISTS idx_access_codes_expires_at ON access_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_access_codes_created_at ON access_codes(created_at);
+CREATE INDEX IF NOT EXISTS idx_access_codes_prefix ON access_codes(prefix);
+CREATE INDEX IF NOT EXISTS idx_access_codes_auto_expire ON access_codes(auto_expire_on_use);
 
 CREATE INDEX IF NOT EXISTS idx_usage_logs_code ON usage_logs(code);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_action ON usage_logs(action);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_timestamp ON usage_logs(timestamp);
+
+-- Add comments to document the new columns
+COMMENT ON COLUMN access_codes.prefix IS 'Optional prefix for the access code (max 4 characters)';
+COMMENT ON COLUMN access_codes.auto_expire_on_use IS 'Whether the code should be automatically deactivated after first use';
 
 -- Create Row Level Security (RLS) policies
 ALTER TABLE access_codes ENABLE ROW LEVEL SECURITY;
@@ -180,5 +188,40 @@ INSERT INTO usage_logs (code, action, details) VALUES
 -- Test the setup by running these queries:
 -- SELECT * FROM access_codes;
 -- SELECT * FROM usage_logs;
+
+-- ============================================================================
+-- ADVANCED SETTINGS DOCUMENTATION
+-- ============================================================================
+
+/*
+ADVANCED SETTINGS COLUMNS:
+
+1. prefix (VARCHAR(4))
+   - Optional 4-character prefix for access codes
+   - Examples: 'VIP', 'TEMP', 'TEST', 'DEMO'
+   - When set, generated codes will start with this prefix
+   - Total code length remains 8 characters (prefix + random chars)
+
+2. auto_expire_on_use (BOOLEAN, DEFAULT TRUE)
+   - Controls whether codes expire after first use
+   - TRUE (default): One-time use codes (expire after validation)
+   - FALSE: Reusable codes (can be validated multiple times)
+   - Provides flexibility for different use cases
+
+USAGE EXAMPLES:
+
+-- Generate a VIP code that expires after first use
+INSERT INTO access_codes (code, expires_at, duration_minutes, prefix, auto_expire_on_use)
+VALUES ('VIP12345', NOW() + INTERVAL '1 hour', 60, 'VIP', TRUE);
+
+-- Generate a reusable test code
+INSERT INTO access_codes (code, expires_at, duration_minutes, prefix, auto_expire_on_use)
+VALUES ('TEST6789', NOW() + INTERVAL '24 hours', 1440, 'TEST', FALSE);
+
+-- Query codes with advanced settings
+SELECT code, prefix, auto_expire_on_use, expires_at, is_active
+FROM access_codes
+WHERE prefix IS NOT NULL OR auto_expire_on_use = FALSE;
+*/
 -- SELECT get_dashboard_stats();
 -- SELECT cleanup_expired_codes();

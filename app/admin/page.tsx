@@ -46,6 +46,8 @@ interface AccessCode {
   createdAt: string
   usedAt?: string
   usedBy?: string
+  prefix?: string
+  auto_expire_on_use?: boolean
 }
 
 interface UsageLog {
@@ -361,6 +363,28 @@ export default function AdminPage() {
       render: (_: any, row: any) => (
         <Badge variant={new Date(row.expiresAt) > new Date() ? "default" : "destructive"}>
           {getTimeRemaining(row.expiresAt)}
+        </Badge>
+      )
+    },
+    {
+      key: "prefix",
+      label: "Prefix",
+      render: (value: string) => (
+        value ? (
+          <Badge variant="outline" className="font-mono">
+            {value}
+          </Badge>
+        ) : (
+          <span className="text-gray-400 text-sm">None</span>
+        )
+      )
+    },
+    {
+      key: "auto_expire_on_use",
+      label: "Reusable",
+      render: (value: boolean) => (
+        <Badge variant={value === false ? "default" : "secondary"}>
+          {value === false ? "Yes" : "No"}
         </Badge>
       )
     },

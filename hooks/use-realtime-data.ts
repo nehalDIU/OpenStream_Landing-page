@@ -99,20 +99,20 @@ export function useRealtimeData({
     }
   }, [adminToken, fetchData])
 
-  const generateCode = useCallback(async (options: { 
+  const generateCode = useCallback(async (options: {
     duration: number
     quantity: number
     prefix?: string
-    autoExpire: boolean 
+    autoExpire: boolean
   }) => {
     setLoading(true)
     try {
       console.log('=== CODE GENERATION DEBUG ===')
       console.log('Admin token:', adminToken ? `${adminToken.substring(0, 8)}...` : 'EMPTY')
       console.log('Options:', options)
-      
+
       const promises = Array.from({ length: options.quantity }, (_, index) => {
-        console.log(`Creating request ${index + 1} for duration: ${options.duration}`)
+        console.log(`Creating request ${index + 1} for duration: ${options.duration}, prefix: ${options.prefix}, autoExpire: ${options.autoExpire}`)
         return fetch('/api/access-codes', {
           method: 'POST',
           headers: {
@@ -121,7 +121,9 @@ export function useRealtimeData({
           },
           body: JSON.stringify({
             action: 'generate',
-            duration: options.duration
+            duration: options.duration,
+            prefix: options.prefix,
+            autoExpire: options.autoExpire
           })
         })
       })

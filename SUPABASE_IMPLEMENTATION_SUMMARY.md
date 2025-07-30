@@ -34,6 +34,8 @@ I've successfully integrated Supabase database into your Access Code Management 
 - used_by (VARCHAR, Optional)
 - duration_minutes (INTEGER)
 - created_by (VARCHAR, Optional)
+- prefix (VARCHAR(4), Optional) - NEW: Custom prefix for codes
+- auto_expire_on_use (BOOLEAN, Default: TRUE) - NEW: Controls reusability
 ```
 
 #### **usage_logs**
