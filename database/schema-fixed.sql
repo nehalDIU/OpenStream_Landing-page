@@ -320,20 +320,95 @@ If upgrading from a version without usage tracking:
 */
 
 -- ============================================================================
--- TEST QUERIES
+-- ANALYTICS FUNCTIONS
 -- ============================================================================
 
--- Test the setup by running these queries:
--- SELECT * FROM access_codes ORDER BY created_at DESC LIMIT 10;
--- SELECT * FROM usage_logs ORDER BY timestamp DESC LIMIT 10;
--- SELECT * FROM get_usage_statistics();
--- SELECT * FROM get_top_used_codes(5);
+-- Function to get comprehensive usage analytics
+CREATE OR REPLACE FUNCTION get_usage_analytics(
+    start_date TIMESTAMP WITH TIME ZONE DEFAULT NOW() - INTERVAL '30 days',
+    end_date TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+)
+RETURNS JSON AS $$
+DECLARE
+    result JSON;
+BEGIN
+    SELECT json_build_object(
+        'total_codes_generated', (
+            SELECT COUNT(*) FROM access_codes
+            WHERE created_at BETWEEN start_date AND end_date
+        ),
+        'total_codes_used', (
+            SELECT COUNT(*) FROM access_codes
+            WHERE used_at BETWEEN start_date AND end_date
+        ),
+        'success_rate', (
+            SELECT ROUND(
+                (COUNT(*) FILTER (WHERE used_at IS NOT NULL)::DECIMAL /
+                 NULLIF(COUNT(*), 0) * 100), 2
+            )
+            FROM access_codes
+            WHERE created_at BETWEEN start_date AND end_date
+        ),
+        'average_usage_time', (
+            SELECT ROUND(
+                AVG(EXTRACT(EPOCH FROM (used_at - created_at)) / 60), 2
+            )
+            FROM access_codes
+            WHERE used_at BETWEEN start_date AND end_date
+        ),
+        'codes_by_prefix', (
+            SELECT json_object_agg(
+                COALESCE(prefix, 'no_prefix'),
+                count
+            )
+            FROM (
+                SELECT
+                    prefix,
+                    COUNT(*) as count
+                FROM access_codes
+                WHERE created_at BETWEEN start_date AND end_date
+                GROUP BY prefix
+            ) prefix_stats
+        ),
+        'daily_usage', (
+            SELECT json_agg(
+                json_build_object(
+                    'date', date_trunc('day', created_at)::date,
+                    'generated', generated_count,
+                    'used', used_count
+                )
+                ORDER BY date_trunc('day', created_at)
+            )
+            FROM (
+                SELECT
+                    created_at,
+                    COUNT(*) as generated_count,
+                    COUNT(*) FILTER (WHERE used_at IS NOT NULL) as used_count
+                FROM access_codes
+                WHERE created_at BETWEEN start_date AND end_date
+                GROUP BY date_trunc('day', created_at)
+            ) daily_stats
+        ),
+        'hourly_distribution', (
+            SELECT json_object_agg(
+                hour_of_day::text,
+                usage_count
+            )
+            FROM (
+                SELECT
+                    EXTRACT(HOUR FROM created_at) as hour_of_day,
+                    COUNT(*) as usage_count
+                FROM access_codes
+                WHERE created_at BETWEEN start_date AND end_date
+                GROUP BY EXTRACT(HOUR FROM created_at)
+                ORDER BY hour_of_day
+            ) hourly_stats
+        )
+    ) INTO result;
 
--- Verify all columns exist:
--- SELECT column_name, data_type, is_nullable
--- FROM information_schema.columns
--- WHERE table_name = 'access_codes'
--- ORDER BY ordinal_position;
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- SCHEMA VERSION INFO

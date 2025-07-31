@@ -110,7 +110,9 @@ export function useRealtimeData({
     try {
       console.log('=== CODE GENERATION DEBUG ===')
       console.log('Admin token:', adminToken ? `${adminToken.substring(0, 8)}...` : 'EMPTY')
+      console.log('Full admin token:', adminToken)
       console.log('Options:', options)
+      console.log('API URL:', '/api/access-codes')
 
       const promises = Array.from({ length: options.quantity }, (_, index) => {
         console.log(`Creating request ${index + 1} for duration: ${options.duration}, prefix: ${options.prefix}, autoExpire: ${options.autoExpire}, maxUses: ${options.maxUses}`)
@@ -141,9 +143,17 @@ export function useRealtimeData({
       })))
       
       const results = await Promise.all(responses.map(async (r, index) => {
-        const json = await r.json()
-        console.log(`Response ${index}:`, { ok: r.ok, status: r.status, data: json })
-        return json
+        try {
+          const json = await r.json()
+          console.log(`Response ${index}:`, { ok: r.ok, status: r.status, data: json })
+          if (!r.ok) {
+            console.error(`API call ${index} failed:`, json)
+          }
+          return json
+        } catch (parseError) {
+          console.error(`Failed to parse response ${index}:`, parseError)
+          return { error: 'Failed to parse response' }
+        }
       }))
       
       const successfulResults = results.filter((result, index) => responses[index].ok)
@@ -153,12 +163,13 @@ export function useRealtimeData({
       const generatedCodes = successfulResults.map(result => result.code)
       
       if (successfulResults.length > 0) {
-        toast.success(`Generated ${successfulResults.length} access code${successfulResults.length > 1 ? 's' : ''} successfully`)
+        console.log(`Successfully generated ${successfulResults.length} code(s)`)
         await fetchData(false) // Refresh data
         return generatedCodes
       } else {
         console.error('All API calls failed. No codes were generated.')
-        throw new Error("No codes generated")
+        console.error('Failed responses:', results.filter((result, index) => !responses[index].ok))
+        throw new Error("All API calls failed. No codes were generated.")
       }
     } catch (error) {
       console.error('Code generation error:', error)

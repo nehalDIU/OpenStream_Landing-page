@@ -16,6 +16,8 @@ import { StatsCards } from "@/components/admin/stats-cards"
 import { DataTable } from "@/components/admin/data-table"
 import { CodeGenerator } from "@/components/admin/code-generator"
 import { ActivityLogs } from "@/components/admin/activity-logs"
+import AnalyticsPage from "@/app/admin/analytics/page"
+import OverviewPage from "@/app/admin/overview/page"
 import {
   Shield,
   Plus,
@@ -485,6 +487,7 @@ export default function AdminPage() {
                   {activeTab === 'codes' && 'Access Codes'}
                   {activeTab === 'logs' && 'Activity Logs'}
                   {activeTab === 'activity-logs' && 'Activity Logs'}
+                  {activeTab === 'analytics' && 'Analytics Dashboard'}
                   {activeTab === 'settings' && 'Settings'}
                 </h1>
                 <p className="theme-text-secondary text-sm mt-1">
@@ -492,6 +495,7 @@ export default function AdminPage() {
                   {activeTab === 'codes' && 'Manage and monitor access codes'}
                   {activeTab === 'logs' && 'View detailed activity and usage logs'}
                   {activeTab === 'activity-logs' && 'Comprehensive activity monitoring with advanced filtering and export capabilities'}
+                  {activeTab === 'analytics' && 'Advanced analytics, reporting, and real-time monitoring'}
                   {activeTab === 'settings' && 'Configure system settings and preferences'}
                 </p>
               </div>
@@ -520,29 +524,16 @@ export default function AdminPage() {
             resolvedTheme === 'dark' ? '' : 'bg-slate-50/30'
           }`}>
             {activeTab === 'overview' && (
-              <div className="space-y-6">
-                <StatsCards data={statsData} loading={loading} />
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <DataTable
-                    title="Recent Access Codes"
-                    description="Latest generated access codes"
-                    data={adminData?.activeCodes.slice(0, 5) || []}
-                    columns={accessCodeColumns.slice(0, 3)}
-                    loading={loading}
-                    searchPlaceholder="Search codes..."
-                  />
-
-                  <DataTable
-                    title="Recent Activity"
-                    description="Latest system activity"
-                    data={adminData?.usageLogs.slice(0, 5) || []}
-                    columns={logColumns.slice(0, 3)}
-                    loading={loading}
-                    searchPlaceholder="Search logs..."
-                  />
-                </div>
-              </div>
+              <OverviewPage
+                adminToken={adminToken}
+                adminData={adminData}
+                loading={loading}
+                error={error}
+                onRefresh={refreshData}
+                onGenerateCode={generateCode}
+                onRevokeCode={revokeCode}
+                onCopyCode={copyCode}
+              />
             )}
 
             {activeTab === 'codes' && (
@@ -592,6 +583,10 @@ export default function AdminPage() {
                 adminToken={adminToken}
                 className="space-y-6"
               />
+            )}
+
+            {activeTab === 'analytics' && (
+              <AnalyticsPage adminToken={adminToken} />
             )}
 
             {activeTab === 'settings' && (

@@ -5,19 +5,20 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useTheme } from "@/contexts/theme-context"
-import { 
-  Shield, 
-  BarChart3, 
-  Key, 
-  Activity, 
-  Settings, 
+import {
+  Shield,
+  BarChart3,
+  Key,
+  Activity,
+  Settings,
   HelpCircle,
   Menu,
   X,
   LogOut,
   Home,
   Users,
-  Clock
+  Clock,
+  TrendingUp
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -63,6 +64,12 @@ export function Sidebar({ activeTab, onTabChange, stats }: SidebarProps) {
       icon: Activity,
       badge: stats?.recentActivity,
       description: "Advanced activity monitoring"
+    },
+    {
+      id: "analytics",
+      label: "Analytics",
+      icon: TrendingUp,
+      description: "Advanced analytics and reporting"
     },
     {
       id: "settings",
