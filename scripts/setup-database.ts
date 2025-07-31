@@ -1,16 +1,21 @@
 /**
  * Database Setup Script
  * Run this script to set up the database with sample data
- * 
+ *
  * Usage: npx tsx scripts/setup-database.ts
  */
 
 import { DatabaseService } from '../lib/supabase'
+import { runMigration } from './migrate-database'
 
 async function setupDatabase() {
   console.log('🚀 Setting up database...')
 
   try {
+    // Run migration first to ensure all columns exist
+    console.log('🔄 Running database migration...')
+    await runMigration()
+
     // Test database connection
     console.log('📡 Testing database connection...')
     const stats = await DatabaseService.getTotalCodesCount()
@@ -23,11 +28,12 @@ async function setupDatabase() {
 
     // Generate some sample codes for testing
     console.log('📝 Generating sample access codes...')
-    
+
     const sampleCodes = await Promise.all([
-      DatabaseService.generateAccessCode(10), // 10 minutes
-      DatabaseService.generateAccessCode(30), // 30 minutes
-      DatabaseService.generateAccessCode(60), // 1 hour
+      DatabaseService.generateAccessCode(10), // 10 minutes - basic code
+      DatabaseService.generateAccessCode(30, 'VIP'), // 30 minutes with prefix
+      DatabaseService.generateAccessCode(60, 'TEST', false), // 1 hour reusable
+      DatabaseService.generateAccessCode(120, 'DEMO', true, 5), // 2 hours with 5 uses limit
     ])
 
     console.log('✅ Generated sample codes:')

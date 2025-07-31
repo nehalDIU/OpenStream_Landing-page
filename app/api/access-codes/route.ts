@@ -53,7 +53,9 @@ export async function GET(request: NextRequest) {
         usedAt: code.used_at,
         usedBy: code.used_by,
         prefix: code.prefix || null,
-        auto_expire_on_use: code.auto_expire_on_use !== undefined ? code.auto_expire_on_use : true
+        auto_expire_on_use: code.auto_expire_on_use !== undefined ? code.auto_expire_on_use : true,
+        max_uses: code.max_uses || null,
+        current_uses: code.current_uses || 0
       }))
 
       const transformedLogs = usageLogs.map(log => ({
@@ -83,7 +85,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { action, code, duration, prefix, autoExpire } = body
+    const { action, code, duration, prefix, autoExpire, maxUses } = body
     const clientIP = getClientIP(request)
 
     // Clean up expired codes before any operation
@@ -98,11 +100,13 @@ export async function POST(request: NextRequest) {
       const expirationMinutes = duration || 10
       const codePrefix = prefix && prefix.trim() ? prefix.trim() : undefined
       const autoExpireOnUse = autoExpire !== false // Default to true if not specified
+      const maxUsesLimit = maxUses && maxUses > 0 ? maxUses : undefined
 
       const accessCode = await DatabaseService.generateAccessCode(
         expirationMinutes,
         codePrefix,
-        autoExpireOnUse
+        autoExpireOnUse,
+        maxUsesLimit
       )
 
       return NextResponse.json({
@@ -110,7 +114,8 @@ export async function POST(request: NextRequest) {
         expiresAt: accessCode.expires_at,
         expirationMinutes,
         prefix: codePrefix,
-        autoExpire: autoExpireOnUse
+        autoExpire: autoExpireOnUse,
+        maxUses: maxUsesLimit
       })
     }
 

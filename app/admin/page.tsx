@@ -48,6 +48,8 @@ interface AccessCode {
   usedBy?: string
   prefix?: string
   auto_expire_on_use?: boolean
+  max_uses?: number
+  current_uses?: number
 }
 
 interface UsageLog {
@@ -387,6 +389,31 @@ export default function AdminPage() {
           {value === false ? "Yes" : "No"}
         </Badge>
       )
+    },
+    {
+      key: "usage",
+      label: "Usage",
+      render: (_: any, row: any) => {
+        if (row.max_uses) {
+          const percentage = (row.current_uses / row.max_uses) * 100
+          const variant = percentage >= 100 ? "destructive" : percentage >= 80 ? "secondary" : "default"
+          return (
+            <Badge variant={variant} className="font-mono">
+              {row.current_uses}/{row.max_uses}
+            </Badge>
+          )
+        } else if (row.current_uses > 0) {
+          return (
+            <Badge variant="outline" className="font-mono">
+              {row.current_uses}
+            </Badge>
+          )
+        } else {
+          return (
+            <span className="text-gray-400 text-sm">Unused</span>
+          )
+        }
+      }
     },
     {
       key: "status",

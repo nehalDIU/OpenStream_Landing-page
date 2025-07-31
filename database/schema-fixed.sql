@@ -1,6 +1,33 @@
--- Supabase Database Schema for Access Code Management System
+-- ============================================================================
+-- OpenStream Landing Page Database Schema (Complete Version)
+-- ============================================================================
+--
+-- VERSION: 2.0 (with Advanced Settings & Usage Tracking)
+-- LAST UPDATED: 2025-01-31
+--
+-- FEATURES INCLUDED:
+-- ✅ Basic access code generation and validation
+-- ✅ Advanced Settings:
+--    - Custom prefixes (up to 4 characters)
+--    - Auto-expire on use control
+--    - Usage limits (1-1000 uses)
+--    - Usage tracking and analytics
+-- ✅ Usage logs and activity tracking
+-- ✅ Utility functions for statistics
+-- ✅ Comprehensive indexes for performance
+-- ✅ Sample data and usage examples
+--
+-- USAGE:
+-- 1. Copy this entire file
+-- 2. Open Supabase Dashboard → SQL Editor
+-- 3. Paste and run this script
+-- 4. Database will be fully configured with all features
+--
+-- MIGRATION:
+-- If you have an existing database, use: database/migration-add-usage-tracking.sql
+--
 -- Compatible with all Supabase plans (Free, Pro, Team, Enterprise)
--- Run this in your Supabase SQL Editor
+-- ============================================================================
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -17,7 +44,9 @@ CREATE TABLE IF NOT EXISTS access_codes (
     duration_minutes INTEGER NOT NULL DEFAULT 10,
     created_by VARCHAR(255) DEFAULT 'admin',
     prefix VARCHAR(4),
-    auto_expire_on_use BOOLEAN DEFAULT TRUE
+    auto_expire_on_use BOOLEAN DEFAULT TRUE,
+    max_uses INTEGER DEFAULT NULL,
+    current_uses INTEGER DEFAULT 0
 );
 
 -- Create usage_logs table
@@ -38,14 +67,89 @@ CREATE INDEX IF NOT EXISTS idx_access_codes_expires_at ON access_codes(expires_a
 CREATE INDEX IF NOT EXISTS idx_access_codes_created_at ON access_codes(created_at);
 CREATE INDEX IF NOT EXISTS idx_access_codes_prefix ON access_codes(prefix);
 CREATE INDEX IF NOT EXISTS idx_access_codes_auto_expire ON access_codes(auto_expire_on_use);
+CREATE INDEX IF NOT EXISTS idx_access_codes_max_uses ON access_codes(max_uses);
+CREATE INDEX IF NOT EXISTS idx_access_codes_current_uses ON access_codes(current_uses);
 
 CREATE INDEX IF NOT EXISTS idx_usage_logs_code ON usage_logs(code);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_action ON usage_logs(action);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_timestamp ON usage_logs(timestamp);
 
--- Add comments to document the new columns
+-- Add comments to document the columns
 COMMENT ON COLUMN access_codes.prefix IS 'Optional prefix for the access code (max 4 characters)';
 COMMENT ON COLUMN access_codes.auto_expire_on_use IS 'Whether the code should be automatically deactivated after first use';
+COMMENT ON COLUMN access_codes.max_uses IS 'Maximum number of times this code can be used (NULL = unlimited)';
+COMMENT ON COLUMN access_codes.current_uses IS 'Current number of times this code has been used';
+
+-- Create utility functions for usage tracking
+CREATE OR REPLACE FUNCTION get_usage_statistics()
+RETURNS TABLE (
+    total_codes BIGINT,
+    active_codes BIGINT,
+    used_codes BIGINT,
+    expired_codes BIGINT,
+    codes_with_usage_limit BIGINT,
+    average_usage_per_code NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        COUNT(*) as total_codes,
+        COUNT(*) FILTER (WHERE is_active = true) as active_codes,
+        COUNT(*) FILTER (WHERE used_at IS NOT NULL) as used_codes,
+        COUNT(*) FILTER (WHERE expires_at < NOW()) as expired_codes,
+        COUNT(*) FILTER (WHERE max_uses IS NOT NULL) as codes_with_usage_limit,
+        ROUND(AVG(COALESCE(current_uses, 0)), 2) as average_usage_per_code
+    FROM access_codes;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create function to get top used codes
+CREATE OR REPLACE FUNCTION get_top_used_codes(limit_count INTEGER DEFAULT 10)
+RETURNS TABLE (
+    code VARCHAR(8),
+    current_uses INTEGER,
+    max_uses INTEGER,
+    usage_percentage NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ac.code,
+        ac.current_uses,
+        ac.max_uses,
+        CASE
+            WHEN ac.max_uses IS NOT NULL AND ac.max_uses > 0
+            THEN ROUND((ac.current_uses::NUMERIC / ac.max_uses::NUMERIC) * 100, 2)
+            ELSE NULL
+        END as usage_percentage
+    FROM access_codes ac
+    WHERE ac.current_uses > 0
+    ORDER BY ac.current_uses DESC, usage_percentage DESC NULLS LAST
+    LIMIT limit_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create function to check if a code has reached its usage limit
+CREATE OR REPLACE FUNCTION is_usage_limit_reached(code_to_check VARCHAR(8))
+RETURNS BOOLEAN AS $$
+DECLARE
+    code_record RECORD;
+BEGIN
+    SELECT max_uses, current_uses INTO code_record
+    FROM access_codes
+    WHERE code = UPPER(code_to_check) AND is_active = true;
+
+    IF NOT FOUND THEN
+        RETURN true; -- Code doesn't exist or is inactive
+    END IF;
+
+    IF code_record.max_uses IS NULL THEN
+        RETURN false; -- No usage limit
+    END IF;
+
+    RETURN code_record.current_uses >= code_record.max_uses;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Create Row Level Security (RLS) policies
 ALTER TABLE access_codes ENABLE ROW LEVEL SECURITY;
@@ -185,9 +289,61 @@ INSERT INTO usage_logs (code, action, details) VALUES
 ('SAMPLE99', 'generated', 'Generated for testing');
 */
 
+-- ============================================================================
+-- BACKUP AND RESTORE INSTRUCTIONS
+-- ============================================================================
+
+/*
+BACKUP YOUR DATA:
+
+1. Export access codes:
+   SELECT * FROM access_codes ORDER BY created_at;
+
+2. Export usage logs:
+   SELECT * FROM usage_logs ORDER BY timestamp;
+
+3. Export statistics:
+   SELECT * FROM get_usage_statistics();
+
+RESTORE FROM BACKUP:
+
+1. Run this schema file first
+2. Import your data using INSERT statements
+3. Verify with test queries below
+
+MIGRATION FROM OLDER VERSIONS:
+
+If upgrading from a version without usage tracking:
+1. Run: database/migration-add-usage-tracking.sql
+2. Verify all columns exist
+3. Test usage limits functionality
+*/
+
+-- ============================================================================
+-- TEST QUERIES
+-- ============================================================================
+
 -- Test the setup by running these queries:
--- SELECT * FROM access_codes;
--- SELECT * FROM usage_logs;
+-- SELECT * FROM access_codes ORDER BY created_at DESC LIMIT 10;
+-- SELECT * FROM usage_logs ORDER BY timestamp DESC LIMIT 10;
+-- SELECT * FROM get_usage_statistics();
+-- SELECT * FROM get_top_used_codes(5);
+
+-- Verify all columns exist:
+-- SELECT column_name, data_type, is_nullable
+-- FROM information_schema.columns
+-- WHERE table_name = 'access_codes'
+-- ORDER BY ordinal_position;
+
+-- ============================================================================
+-- SCHEMA VERSION INFO
+-- ============================================================================
+
+-- Schema version: 2.0
+-- Features: Basic codes, Advanced settings, Usage tracking, Analytics
+-- Last updated: 2025-01-31
+-- Compatible with: All Supabase plans
+-- Migration path: database/migration-add-usage-tracking.sql (for existing DBs)
 
 -- ============================================================================
 -- ADVANCED SETTINGS DOCUMENTATION
@@ -208,20 +364,144 @@ ADVANCED SETTINGS COLUMNS:
    - FALSE: Reusable codes (can be validated multiple times)
    - Provides flexibility for different use cases
 
+3. max_uses (INTEGER, DEFAULT NULL)
+   - Maximum number of times this code can be used
+   - NULL (default): Unlimited uses (controlled by auto_expire_on_use)
+   - 1: One-time use (same as auto_expire_on_use = TRUE)
+   - 2+: Limited multi-use codes (e.g., 5 uses, 10 uses)
+   - Overrides auto_expire_on_use when set
+
+4. current_uses (INTEGER, DEFAULT 0)
+   - Current number of times this code has been used
+   - Automatically incremented on each validation
+   - Used to enforce max_uses limit
+   - Provides usage analytics
+
 USAGE EXAMPLES:
+
+-- ============================================================================
+-- BASIC CODE GENERATION
+-- ============================================================================
+
+-- Generate a basic code (10 minutes, one-time use)
+INSERT INTO access_codes (code, expires_at, duration_minutes)
+VALUES ('BASIC123', NOW() + INTERVAL '10 minutes', 10);
 
 -- Generate a VIP code that expires after first use
 INSERT INTO access_codes (code, expires_at, duration_minutes, prefix, auto_expire_on_use)
 VALUES ('VIP12345', NOW() + INTERVAL '1 hour', 60, 'VIP', TRUE);
 
--- Generate a reusable test code
+-- Generate a reusable test code (unlimited uses)
 INSERT INTO access_codes (code, expires_at, duration_minutes, prefix, auto_expire_on_use)
 VALUES ('TEST6789', NOW() + INTERVAL '24 hours', 1440, 'TEST', FALSE);
 
--- Query codes with advanced settings
-SELECT code, prefix, auto_expire_on_use, expires_at, is_active
+-- ============================================================================
+-- USAGE LIMIT EXAMPLES
+-- ============================================================================
+
+-- Generate a code that can be used exactly 5 times
+INSERT INTO access_codes (code, expires_at, duration_minutes, prefix, max_uses, current_uses)
+VALUES ('DEMO5USE', NOW() + INTERVAL '12 hours', 720, 'DEMO', 5, 0);
+
+-- Generate a premium code with 10 uses
+INSERT INTO access_codes (code, expires_at, duration_minutes, prefix, max_uses, current_uses)
+VALUES ('PREM10X', NOW() + INTERVAL '7 days', 10080, 'PREM', 10, 0);
+
+-- Generate a trial code with 3 uses
+INSERT INTO access_codes (code, expires_at, duration_minutes, prefix, max_uses, current_uses)
+VALUES ('TRIAL3X', NOW() + INTERVAL '2 days', 2880, 'TRIAL', 3, 0);
+
+-- Generate a one-time code using max_uses (alternative to auto_expire_on_use)
+INSERT INTO access_codes (code, expires_at, duration_minutes, prefix, max_uses, current_uses)
+VALUES ('ONCE1234', NOW() + INTERVAL '1 hour', 60, 'ONCE', 1, 0);
+
+-- ============================================================================
+-- QUERY EXAMPLES
+-- ============================================================================
+
+-- Query codes with usage tracking
+SELECT code, prefix, max_uses, current_uses,
+       CASE
+         WHEN max_uses IS NULL THEN 'Unlimited'
+         ELSE CONCAT(current_uses, '/', max_uses)
+       END as usage_status,
+       expires_at, is_active
 FROM access_codes
-WHERE prefix IS NOT NULL OR auto_expire_on_use = FALSE;
+WHERE max_uses IS NOT NULL OR prefix IS NOT NULL
+ORDER BY created_at DESC;
+
+-- Find codes that are close to their usage limit (80% used)
+SELECT code, prefix, current_uses, max_uses,
+       (max_uses - current_uses) as remaining_uses,
+       ROUND((current_uses::NUMERIC / max_uses::NUMERIC) * 100, 2) as usage_percentage
+FROM access_codes
+WHERE max_uses IS NOT NULL
+  AND current_uses >= (max_uses * 0.8)
+  AND is_active = TRUE
+ORDER BY usage_percentage DESC;
+
+-- Find codes that have reached their usage limit
+SELECT code, prefix, current_uses, max_uses, used_at
+FROM access_codes
+WHERE max_uses IS NOT NULL
+  AND current_uses >= max_uses
+ORDER BY used_at DESC;
+
+-- Get usage statistics using the utility function
+SELECT * FROM get_usage_statistics();
+
+-- Get top 5 most used codes
+SELECT * FROM get_top_used_codes(5);
+
+-- Check if a specific code has reached its limit
+SELECT is_usage_limit_reached('DEMO5USE');
+
+-- ============================================================================
+-- ANALYTICS QUERIES
+-- ============================================================================
+
+-- Usage distribution by limit type
+SELECT
+    CASE
+        WHEN max_uses IS NULL THEN 'Unlimited'
+        WHEN max_uses = 1 THEN 'One-time'
+        WHEN max_uses <= 5 THEN 'Low limit (2-5)'
+        WHEN max_uses <= 25 THEN 'Medium limit (6-25)'
+        ELSE 'High limit (26+)'
+    END as limit_type,
+    COUNT(*) as code_count,
+    AVG(current_uses) as avg_usage
+FROM access_codes
+GROUP BY
+    CASE
+        WHEN max_uses IS NULL THEN 'Unlimited'
+        WHEN max_uses = 1 THEN 'One-time'
+        WHEN max_uses <= 5 THEN 'Low limit (2-5)'
+        WHEN max_uses <= 25 THEN 'Medium limit (6-25)'
+        ELSE 'High limit (26+)'
+    END
+ORDER BY code_count DESC;
+
+-- Prefix usage statistics
+SELECT
+    COALESCE(prefix, 'No prefix') as prefix_type,
+    COUNT(*) as code_count,
+    AVG(current_uses) as avg_usage,
+    SUM(current_uses) as total_usage
+FROM access_codes
+GROUP BY prefix
+ORDER BY code_count DESC;
+
+-- Daily code generation and usage
+SELECT
+    DATE(created_at) as date,
+    COUNT(*) as codes_generated,
+    COUNT(CASE WHEN used_at IS NOT NULL THEN 1 END) as codes_used,
+    SUM(current_uses) as total_usage
+FROM access_codes
+WHERE created_at >= NOW() - INTERVAL '30 days'
+GROUP BY DATE(created_at)
+ORDER BY date DESC;
 */
 -- SELECT get_dashboard_stats();
 -- SELECT cleanup_expired_codes();

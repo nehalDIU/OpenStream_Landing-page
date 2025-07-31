@@ -31,6 +31,8 @@ export interface AccessCode {
   created_by?: string
   prefix?: string
   auto_expire_on_use?: boolean
+  max_uses?: number
+  current_uses?: number
 }
 
 export interface UsageLog {
@@ -132,7 +134,8 @@ export class DatabaseService {
   static async generateAccessCode(
     duration: number = 10,
     prefix?: string,
-    autoExpireOnUse: boolean = true
+    autoExpireOnUse: boolean = true,
+    maxUses?: number
   ): Promise<AccessCode> {
     this.checkSupabaseClient()
 
@@ -149,20 +152,25 @@ export class DatabaseService {
 
     // Try to add advanced settings if they exist in the database
     try {
-      // First attempt with advanced settings
+      // First attempt with advanced settings including usage tracking
       const { data, error } = await supabase!
         .from('access_codes')
         .insert({
           ...insertData,
           prefix: prefix || null,
-          auto_expire_on_use: autoExpireOnUse
+          auto_expire_on_use: autoExpireOnUse,
+          max_uses: maxUses || null,
+          current_uses: 0
         })
         .select()
         .single()
 
       if (error) {
         // If error is about missing columns, fall back to basic insert
-        if (error.message.includes('auto_expire_on_use') || error.message.includes('prefix')) {
+        if (error.message.includes('auto_expire_on_use') ||
+            error.message.includes('prefix') ||
+            error.message.includes('max_uses') ||
+            error.message.includes('current_uses')) {
           console.warn('Advanced settings columns not found, falling back to basic code generation')
           const { data: fallbackData, error: fallbackError } = await supabase!
             .from('access_codes')
@@ -186,6 +194,7 @@ export class DatabaseService {
       const settingsInfo = []
       if (prefix) settingsInfo.push(`prefix: ${prefix}`)
       if (!autoExpireOnUse) settingsInfo.push('reusable')
+      if (maxUses) settingsInfo.push(`max uses: ${maxUses}`)
       const settingsStr = settingsInfo.length > 0 ? ` (${settingsInfo.join(', ')})` : ''
 
       await this.addUsageLog(code, 'generated', `Expires in ${duration} minutes${settingsStr}`)
@@ -211,11 +220,19 @@ export class DatabaseService {
       return { valid: false, message: 'Invalid access code' }
     }
 
-    // Check if already used (only for auto-expire codes or if advanced settings not available)
+    // Check usage limits
     const hasAdvancedSettings = accessCode.hasOwnProperty('auto_expire_on_use')
+    const hasUsageTracking = accessCode.hasOwnProperty('max_uses') && accessCode.hasOwnProperty('current_uses')
+
+    // Check if max uses exceeded
+    if (hasUsageTracking && accessCode.max_uses && accessCode.current_uses >= accessCode.max_uses) {
+      return { valid: false, message: `Access code has reached its usage limit (${accessCode.max_uses} uses)` }
+    }
+
+    // Check if already used (only for auto-expire codes or if advanced settings not available)
     const shouldCheckReuse = hasAdvancedSettings ? accessCode.auto_expire_on_use !== false : true // Default to one-time use
 
-    if (accessCode.used_at && shouldCheckReuse) {
+    if (accessCode.used_at && shouldCheckReuse && !hasUsageTracking) {
       return { valid: false, message: 'Access code has already been used and cannot be reused' }
     }
 
@@ -230,22 +247,44 @@ export class DatabaseService {
     }
 
     // Determine if code should be deactivated after use
-    const shouldDeactivate = hasAdvancedSettings ? (accessCode.auto_expire_on_use !== false) : true // Default to true
+    let shouldDeactivate = hasAdvancedSettings ? (accessCode.auto_expire_on_use !== false) : true // Default to true
 
-    // Mark as used and optionally deactivate based on auto_expire_on_use setting
+    // If using usage tracking, check if this will be the last use
+    if (hasUsageTracking && accessCode.max_uses) {
+      const newUsageCount = (accessCode.current_uses || 0) + 1
+      shouldDeactivate = newUsageCount >= accessCode.max_uses
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      used_at: now.toISOString(),
+      used_by: ipAddress || 'unknown',
+      is_active: !shouldDeactivate
+    }
+
+    // Add usage tracking if available
+    if (hasUsageTracking) {
+      updateData.current_uses = (accessCode.current_uses || 0) + 1
+    }
+
+    // Mark as used and optionally deactivate
     await supabase!
       .from('access_codes')
-      .update({
-        used_at: now.toISOString(),
-        used_by: ipAddress || 'unknown',
-        is_active: !shouldDeactivate  // Only deactivate if auto_expire_on_use is true
-      })
+      .update(updateData)
       .eq('code', code.toUpperCase())
 
     // Log the usage with appropriate message
-    const usageType = shouldDeactivate ? 'One-time use' : 'Reusable'
+    let usageInfo = ''
+    if (hasUsageTracking && accessCode.max_uses) {
+      const newUsageCount = (accessCode.current_uses || 0) + 1
+      usageInfo = `Use ${newUsageCount}/${accessCode.max_uses}`
+      if (shouldDeactivate) usageInfo += ' (limit reached)'
+    } else {
+      usageInfo = shouldDeactivate ? 'One-time use' : 'Reusable'
+    }
+
     const advancedNote = hasAdvancedSettings ? '' : ' (legacy mode)'
-    await this.addUsageLog(code, 'used', `Used by ${ipAddress || 'unknown'} - ${usageType}${advancedNote}`)
+    await this.addUsageLog(code, 'used', `Used by ${ipAddress || 'unknown'} - ${usageInfo}${advancedNote}`)
 
     return { valid: true, message: 'Access code validated successfully', accessCode }
   }
@@ -287,7 +326,7 @@ export class DatabaseService {
 
   static async getTotalCodesCount(): Promise<number> {
     this.checkSupabaseClient()
-    
+
     const { count, error } = await supabase!
       .from('access_codes')
       .select('*', { count: 'exact', head: true })
@@ -297,6 +336,90 @@ export class DatabaseService {
     }
 
     return count || 0
+  }
+
+  // Usage Statistics Methods
+  static async getUsageStatistics(): Promise<{
+    totalCodes: number
+    activeCodes: number
+    usedCodes: number
+    expiredCodes: number
+    codesWithUsageLimit: number
+    averageUsagePerCode: number
+    topUsedCodes: Array<{code: string, uses: number, maxUses?: number}>
+  }> {
+    this.checkSupabaseClient()
+
+    try {
+      // Get all codes with usage data
+      const { data: codes, error } = await supabase!
+        .from('access_codes')
+        .select('code, is_active, used_at, expires_at, current_uses, max_uses')
+
+      if (error) {
+        throw new Error(`Failed to get usage statistics: ${error.message}`)
+      }
+
+      const now = new Date()
+      const totalCodes = codes?.length || 0
+      const activeCodes = codes?.filter(c => c.is_active).length || 0
+      const usedCodes = codes?.filter(c => c.used_at).length || 0
+      const expiredCodes = codes?.filter(c => new Date(c.expires_at) < now).length || 0
+      const codesWithUsageLimit = codes?.filter(c => c.max_uses).length || 0
+
+      // Calculate average usage
+      const totalUsage = codes?.reduce((sum, c) => sum + (c.current_uses || 0), 0) || 0
+      const averageUsagePerCode = totalCodes > 0 ? totalUsage / totalCodes : 0
+
+      // Get top used codes
+      const topUsedCodes = codes
+        ?.filter(c => c.current_uses && c.current_uses > 0)
+        .sort((a, b) => (b.current_uses || 0) - (a.current_uses || 0))
+        .slice(0, 10)
+        .map(c => ({
+          code: c.code,
+          uses: c.current_uses || 0,
+          maxUses: c.max_uses || undefined
+        })) || []
+
+      return {
+        totalCodes,
+        activeCodes,
+        usedCodes,
+        expiredCodes,
+        codesWithUsageLimit,
+        averageUsagePerCode: Math.round(averageUsagePerCode * 100) / 100,
+        topUsedCodes
+      }
+    } catch (error) {
+      throw new Error(`Failed to get usage statistics: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  static async getCodeUsageHistory(code: string): Promise<Array<{
+    timestamp: string
+    action: string
+    details: string
+    usageCount?: number
+  }>> {
+    this.checkSupabaseClient()
+
+    const { data: logs, error } = await supabase!
+      .from('usage_logs')
+      .select('*')
+      .eq('code', code.toUpperCase())
+      .order('timestamp', { ascending: false })
+
+    if (error) {
+      throw new Error(`Failed to get code usage history: ${error.message}`)
+    }
+
+    return logs?.map(log => ({
+      timestamp: log.timestamp,
+      action: log.action,
+      details: log.details || '',
+      usageCount: log.details?.match(/Use (\d+)\//) ? parseInt(log.details.match(/Use (\d+)\//)?.[1] || '0') : undefined
+    })) || []
   }
 
   // Usage Logs Operations

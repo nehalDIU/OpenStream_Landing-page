@@ -32,6 +32,7 @@ interface GenerateOptions {
   quantity: number
   prefix?: string
   autoExpire: boolean
+  maxUses?: number
 }
 
 export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
@@ -39,6 +40,9 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
   const [quantity, setQuantity] = useState(1)
   const [prefix, setPrefix] = useState("")
   const [autoExpire, setAutoExpire] = useState(true)
+  const [maxUses, setMaxUses] = useState<number | undefined>(undefined)
+  const [selectedUsageLimit, setSelectedUsageLimit] = useState<string>("unlimited")
+  const [customUsageLimit, setCustomUsageLimit] = useState<string>("")
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [lastGenerated, setLastGenerated] = useState<string[]>([])
   const { resolvedTheme } = useTheme()
@@ -52,15 +56,51 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
     { label: "24 hours", value: 1440 }
   ]
 
+  const presetUsageLimits = [
+    { label: "Unlimited", value: "unlimited" },
+    { label: "1 use (One-time)", value: "1" },
+    { label: "3 uses", value: "3" },
+    { label: "5 uses", value: "5" },
+    { label: "10 uses", value: "10" },
+    { label: "25 uses", value: "25" },
+    { label: "50 uses", value: "50" },
+    { label: "100 uses", value: "100" },
+    { label: "Custom", value: "custom" }
+  ]
+
+  const handleUsageLimitChange = (value: string) => {
+    setSelectedUsageLimit(value)
+
+    if (value === "unlimited") {
+      setMaxUses(undefined)
+    } else if (value === "custom") {
+      // Keep current custom value or set to empty
+      const customValue = customUsageLimit ? parseInt(customUsageLimit) : undefined
+      setMaxUses(customValue)
+    } else {
+      // Convert string value to number for preset values
+      const numericValue = parseInt(value)
+      setMaxUses(isNaN(numericValue) ? undefined : numericValue)
+    }
+  }
+
+  const handleCustomUsageLimitChange = (value: string) => {
+    setCustomUsageLimit(value)
+    if (selectedUsageLimit === "custom") {
+      setMaxUses(value ? parseInt(value) : undefined)
+    }
+  }
+
   const handleGenerate = async () => {
     try {
-      console.log('Starting code generation with options:', { duration, quantity, prefix, autoExpire })
+      console.log('Starting code generation with options:', { duration, quantity, prefix, autoExpire, maxUses })
 
       const options: GenerateOptions = {
         duration,
         quantity,
         prefix: prefix.trim() || undefined,
-        autoExpire
+        autoExpire,
+        maxUses: maxUses && maxUses > 0 ? maxUses : undefined
       }
 
       // Call the parent's generate function and get the result
@@ -220,6 +260,55 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
                   onCheckedChange={setAutoExpire}
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="usageLimit" className="theme-text-secondary">
+                  Usage Limit
+                </Label>
+                <Select value={selectedUsageLimit} onValueChange={handleUsageLimitChange}>
+                  <SelectTrigger className="theme-input theme-transition">
+                    <SelectValue placeholder="Select usage limit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {presetUsageLimits.map((preset) => (
+                      <SelectItem
+                        key={preset.value}
+                        value={preset.value}
+                      >
+                        {preset.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Custom usage limit input - only show when "Custom" is selected */}
+                {selectedUsageLimit === "custom" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="customUsageLimit" className="theme-text-secondary text-sm">
+                      Custom Usage Limit
+                    </Label>
+                    <Input
+                      id="customUsageLimit"
+                      type="number"
+                      placeholder="Enter number (1-1000)"
+                      value={customUsageLimit}
+                      onChange={(e) => handleCustomUsageLimitChange(e.target.value)}
+                      className="theme-input theme-transition"
+                      min={1}
+                      max={1000}
+                    />
+                  </div>
+                )}
+
+                <p className="text-xs theme-text-muted">
+                  {selectedUsageLimit === "unlimited"
+                    ? "Code can be used unlimited times (controlled by auto-expire setting)"
+                    : selectedUsageLimit === "custom"
+                    ? "Enter a custom number of uses (1-1000)"
+                    : `Code will be deactivated after ${maxUses} use${maxUses !== 1 ? 's' : ''}`
+                  }
+                </p>
+              </div>
             </div>
           )}
 
@@ -232,13 +321,24 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
                 ` They will expire in ${duration} minute${duration > 1 ? 's' : ''}.` :
                 ` They will expire in ${Math.floor(duration / 60)} hour${Math.floor(duration / 60) > 1 ? 's' : ''}.`
               }
+              {maxUses && (
+                ` Each code can be used ${maxUses} time${maxUses > 1 ? 's' : ''}.`
+              )}
+              {!maxUses && !autoExpire && (
+                ` Codes can be reused unlimited times.`
+              )}
             </AlertDescription>
           </Alert>
 
           {/* Generate Button */}
           <Button
             onClick={handleGenerate}
-            disabled={loading || quantity < 1 || quantity > 50}
+            disabled={
+              loading ||
+              quantity < 1 ||
+              quantity > 50 ||
+              (selectedUsageLimit === "custom" && (!customUsageLimit || parseInt(customUsageLimit) < 1 || parseInt(customUsageLimit) > 1000))
+            }
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
             size="lg"
           >

@@ -104,6 +104,7 @@ export function useRealtimeData({
     quantity: number
     prefix?: string
     autoExpire: boolean
+    maxUses?: number
   }) => {
     setLoading(true)
     try {
@@ -112,7 +113,7 @@ export function useRealtimeData({
       console.log('Options:', options)
 
       const promises = Array.from({ length: options.quantity }, (_, index) => {
-        console.log(`Creating request ${index + 1} for duration: ${options.duration}, prefix: ${options.prefix}, autoExpire: ${options.autoExpire}`)
+        console.log(`Creating request ${index + 1} for duration: ${options.duration}, prefix: ${options.prefix}, autoExpire: ${options.autoExpire}, maxUses: ${options.maxUses}`)
         return fetch('/api/access-codes', {
           method: 'POST',
           headers: {
@@ -123,7 +124,8 @@ export function useRealtimeData({
             action: 'generate',
             duration: options.duration,
             prefix: options.prefix,
-            autoExpire: options.autoExpire
+            autoExpire: options.autoExpire,
+            maxUses: options.maxUses
           })
         })
       })
