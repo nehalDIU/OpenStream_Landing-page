@@ -91,13 +91,30 @@ export default function AdminPage() {
     refreshInterval: 30000
   })
 
-  // Session persistence - restore authentication state on page load
+  // Session persistence - restore authentication state and active tab on page load
   useEffect(() => {
     const restoreSession = async () => {
       try {
         const savedToken = localStorage.getItem('admin-token')
         const savedAuth = localStorage.getItem('admin-authenticated')
         const sessionTimestamp = localStorage.getItem('admin-session-timestamp')
+        const savedActiveTab = localStorage.getItem('admin-active-tab')
+
+        // Restore active tab from URL hash first, then localStorage
+        const validTabs = ['overview', 'codes', 'logs', 'activity-logs', 'analytics', 'settings']
+        const urlHash = typeof window !== 'undefined' ? window.location.hash.slice(1) : ''
+
+        if (urlHash && validTabs.includes(urlHash)) {
+          setActiveTab(urlHash)
+          // Update localStorage to match URL
+          localStorage.setItem('admin-active-tab', urlHash)
+        } else if (savedActiveTab && validTabs.includes(savedActiveTab)) {
+          setActiveTab(savedActiveTab)
+          // Update URL to match localStorage
+          if (typeof window !== 'undefined') {
+            window.history.replaceState(null, '', `#${savedActiveTab}`)
+          }
+        }
 
         if (savedToken && savedAuth === 'true') {
           // Check if session has expired (24 hours)
@@ -145,6 +162,29 @@ export default function AdminPage() {
     restoreSession()
   }, [])
 
+  // Listen for URL hash changes (browser back/forward navigation)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const validTabs = ['overview', 'codes', 'logs', 'activity-logs', 'analytics', 'settings']
+      const urlHash = window.location.hash.slice(1)
+
+      if (urlHash && validTabs.includes(urlHash) && urlHash !== activeTab) {
+        setActiveTab(urlHash)
+        // Update localStorage to match URL
+        try {
+          localStorage.setItem('admin-active-tab', urlHash)
+        } catch (error) {
+          console.warn('Failed to save active tab preference:', error)
+        }
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('hashchange', handleHashChange)
+      return () => window.removeEventListener('hashchange', handleHashChange)
+    }
+  }, [activeTab])
+
   const authenticate = async () => {
     if (!adminToken.trim()) {
       toast.error("Please enter admin password")
@@ -181,7 +221,23 @@ export default function AdminPage() {
     localStorage.removeItem('admin-token')
     localStorage.removeItem('admin-authenticated')
     localStorage.removeItem('admin-session-timestamp')
+    localStorage.removeItem('admin-active-tab')
     toast.success("Logged out successfully")
+  }
+
+  // Handle tab change with persistence and URL sync
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    // Persist active tab to localStorage
+    try {
+      localStorage.setItem('admin-active-tab', tab)
+    } catch (error) {
+      console.warn('Failed to save active tab preference:', error)
+    }
+    // Update URL hash to reflect current tab
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#${tab}`)
+    }
   }
 
   // All data management functions are now handled by the useRealtimeData hook
@@ -472,7 +528,7 @@ export default function AdminPage() {
         {/* Sidebar */}
         <Sidebar
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
           stats={statsData}
         />
 
