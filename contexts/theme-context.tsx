@@ -27,6 +27,7 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<Theme>(defaultTheme)
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('dark')
+  const [mounted, setMounted] = useState(false)
 
   // Get system preference
   const getSystemTheme = (): ResolvedTheme => {
@@ -86,15 +87,22 @@ export function ThemeProvider({
     setTheme(newTheme)
   }
 
+  // Handle mounting to prevent hydration issues
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   // Initialize theme on mount
   useEffect(() => {
+    if (!mounted) return
+
     try {
       // Try to get saved theme from localStorage
       const savedTheme = localStorage.getItem(storageKey) as Theme | null
       const initialTheme = savedTheme || defaultTheme
-      
+
       setThemeState(initialTheme)
-      
+
       const initialResolvedTheme = resolveTheme(initialTheme)
       setResolvedTheme(initialResolvedTheme)
       applyTheme(initialResolvedTheme)
@@ -105,14 +113,14 @@ export function ThemeProvider({
       setResolvedTheme(fallbackResolvedTheme)
       applyTheme(fallbackResolvedTheme)
     }
-  }, [defaultTheme, storageKey])
+  }, [mounted, defaultTheme, storageKey])
 
   // Listen for system theme changes
   useEffect(() => {
-    if (theme !== 'system') return
+    if (!mounted || theme !== 'system') return
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    
+
     const handleChange = () => {
       const newResolvedTheme = getSystemTheme()
       setResolvedTheme(newResolvedTheme)
@@ -121,7 +129,7 @@ export function ThemeProvider({
 
     mediaQuery.addEventListener('change', handleChange)
     return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [theme])
+  }, [mounted, theme])
 
   const value: ThemeContextType = {
     theme,

@@ -84,23 +84,42 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== API POST REQUEST DEBUG ===')
     const body = await request.json()
+    console.log('Request body:', body)
+
     const { action, code, duration, prefix, autoExpire, maxUses } = body
     const clientIP = getClientIP(request)
+    console.log('Action:', action, 'Client IP:', clientIP)
 
     // Clean up expired codes before any operation
     await ensureCleanup()
 
     if (action === 'generate') {
+      console.log('Processing generate action...')
+
       // Admin endpoint to generate new code
+      const authHeader = request.headers.get('authorization')
+      console.log('Auth header:', authHeader ? `${authHeader.substring(0, 20)}...` : 'MISSING')
+      console.log('Expected token:', ADMIN_TOKEN ? `${ADMIN_TOKEN.substring(0, 8)}...` : 'MISSING')
+
       if (!isValidAdminToken(request)) {
+        console.log('Authorization failed')
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
+      console.log('Authorization successful')
       const expirationMinutes = duration || 10
       const codePrefix = prefix && prefix.trim() ? prefix.trim() : undefined
       const autoExpireOnUse = autoExpire !== false // Default to true if not specified
       const maxUsesLimit = maxUses && maxUses > 0 ? maxUses : undefined
+
+      console.log('Generating code with params:', {
+        expirationMinutes,
+        codePrefix,
+        autoExpireOnUse,
+        maxUsesLimit
+      })
 
       const accessCode = await DatabaseService.generateAccessCode(
         expirationMinutes,
@@ -108,6 +127,8 @@ export async function POST(request: NextRequest) {
         autoExpireOnUse,
         maxUsesLimit
       )
+
+      console.log('Code generated successfully:', accessCode.code)
 
       return NextResponse.json({
         code: accessCode.code,
@@ -154,12 +175,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Code revoked successfully' })
     }
 
+    console.log('Invalid action received:', action)
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error) {
-    console.error('Access code API error:', error)
+    console.error('=== API ERROR ===')
+    console.error('Error type:', typeof error)
+    console.error('Error message:', error instanceof Error ? error.message : 'Unknown error')
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('Full error object:', error)
+
     return NextResponse.json({
       error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      type: typeof error
     }, { status: 500 })
   }
 }

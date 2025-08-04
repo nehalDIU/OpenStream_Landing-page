@@ -291,7 +291,7 @@ Auto-expire on use: ${code.auto_expire_on_use ? 'Yes' : 'No'}
               Latest generated access codes with real-time status
             </CardDescription>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <Button
               onClick={onRefresh}
@@ -301,7 +301,7 @@ Auto-expire on use: ${code.auto_expire_on_use ? 'Yes' : 'No'}
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -320,7 +320,7 @@ Auto-expire on use: ${code.auto_expire_on_use ? 'Yes' : 'No'}
             </DropdownMenu>
           </div>
         </div>
-        
+
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -332,7 +332,7 @@ Auto-expire on use: ${code.auto_expire_on_use ? 'Yes' : 'No'}
           />
         </div>
       </CardHeader>
-      
+
       <CardContent>
         {loading ? (
           <div className="space-y-3">
@@ -356,7 +356,7 @@ Auto-expire on use: ${code.auto_expire_on_use ? 'Yes' : 'No'}
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead 
+                  <TableHead
                     className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                     onClick={() => handleSort("code")}
                   >
@@ -366,7 +366,7 @@ Auto-expire on use: ${code.auto_expire_on_use ? 'Yes' : 'No'}
                     </div>
                   </TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead 
+                  <TableHead
                     className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                     onClick={() => handleSort("createdAt")}
                   >

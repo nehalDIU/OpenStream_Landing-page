@@ -1,10 +1,11 @@
 "use client"
 
-import { Download, Zap, Shield, Star, Play, Tv, Film, Gamepad2, CheckCircle } from "lucide-react"
+import { Download, Zap, Shield, Star, Play, Tv, Film, Gamepad2, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { AccessCodeDialog } from "@/components/access-code-dialog"
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
 import Image from "next/image"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -335,6 +336,152 @@ export default function Home() {
         <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
           <div className="w-6 h-10 border-2 border-white/30 rounded-full flex justify-center">
             <div className="w-1 h-3 bg-white/50 rounded-full mt-2 animate-pulse"></div>
+          </div>
+        </div>
+      </section>
+
+      {/* App Demo Section */}
+      <section className="py-20 bg-gradient-to-b from-black to-gray-900">
+        <div className="container mx-auto px-4">
+          <div className="max-w-7xl mx-auto">
+            {/* Section Header */}
+            <div className="text-center mb-16">
+              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+                See OpenStream in{" "}
+                <span className="bg-gradient-to-r from-red-400 to-purple-400 bg-clip-text text-transparent">
+                  Action
+                </span>
+              </h2>
+              <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+                Explore our intuitive interface and discover how easy it is to access thousands of movies,
+                TV shows, and anime with just a few taps
+              </p>
+            </div>
+
+            {/* Demo Carousel */}
+            <div className="relative">
+              <Carousel
+                opts={{
+                  align: "start",
+                  loop: true,
+                  slidesToScroll: 4,
+                }}
+                className="w-full"
+              >
+                <CarouselContent className="-ml-2 md:-ml-4">
+                  {/* Demo Screenshots */}
+                  {[
+                    {
+                      type: "image",
+                      src: "/images/Carousel/HomePage.png",
+                      alt: "OpenStream home screen showing latest movies and trending content",
+                      title: "Discover Latest Content",
+                      description: "Browse through the latest movies, TV shows, and trending content on our beautiful home screen"
+                    },
+                    {
+                      type: "image",
+                      src: "/images/Carousel/ContentDetails.png",
+                      alt: "Movie details page with play options and quality selection",
+                      title: "Rich Content Details",
+                      description: "Get detailed information about movies and shows with multiple streaming options and quality choices"
+                    },
+                    {
+                      type: "image",
+                      src: "/images/Carousel/ContentDetails2.png",
+                      alt: "Language selection interface showing multiple subtitle options",
+                      title: "Multi-Language Support",
+                      description: "Choose from multiple languages and subtitle options for a personalized viewing experience"
+                    },
+                    {
+                      type: "image",
+                      src: "/images/Carousel/Server.png",
+                      alt: "Settings screen with streaming quality and server options",
+                      title: "Customizable Settings",
+                      description: "Fine-tune your streaming experience with quality settings, server selection, and more"
+                    },
+                    {
+                      type: "image",
+                      src: "/images/Carousel/ClickToPlay.png",
+                      alt: "Video player interface with controls and quality options",
+                      title: "Advanced Player",
+                      description: "Enjoy seamless playback with our advanced video player featuring quality controls and subtitle support"
+                    }
+                  ].map((item, index) => (
+                    <CarouselItem key={index} className="min-w-0 shrink-0 grow-0 basis-full pl-2 md:pl-4 sm:basis-1/2 md:basis-1/3 lg:basis-1/4 xl:basis-1/4">
+                      <div className="group relative">
+                        <Card className="bg-gray-800/50 border-gray-700 hover:border-gray-600 transition-all duration-300 overflow-hidden">
+                          <CardContent className="p-0">
+                            <div className="relative w-full bg-black overflow-hidden rounded-lg" style={{ aspectRatio: 'auto' }}>
+                              {item.type === "image" ? (
+                                <Image
+                                  src={item.src}
+                                  alt={item.alt}
+                                  width={400}
+                                  height={0}
+                                  style={{ height: 'auto', width: '100%' }}
+                                  className="group-hover:scale-105 transition-transform duration-500"
+                                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                />
+                              ) : (
+                                <div className="relative w-full">
+                                  <video
+                                    poster={item.poster}
+                                    className="w-full h-auto object-contain group-hover:scale-105 transition-transform duration-500"
+                                    controls
+                                    preload="metadata"
+                                  >
+                                    <source src={item.src} type="video/mp4" />
+                                    Your browser does not support the video tag.
+                                  </video>
+                                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors duration-300 flex items-center justify-center">
+                                    <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                      <Play className="h-8 w-8 text-white ml-1" />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Overlay with info */}
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                <div className="absolute bottom-0 left-0 right-0 p-6">
+                                  <h3 className="text-white font-semibold text-lg mb-2">{item.title}</h3>
+                                  <p className="text-gray-200 text-sm leading-relaxed">{item.description}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+
+                {/* Custom Navigation Buttons */}
+                <CarouselPrevious className="absolute -left-4 top-1/2 -translate-y-1/2 bg-gray-800/80 border-gray-600 hover:bg-gray-700 text-white h-12 w-12" />
+                <CarouselNext className="absolute -right-4 top-1/2 -translate-y-1/2 bg-gray-800/80 border-gray-600 hover:bg-gray-700 text-white h-12 w-12" />
+              </Carousel>
+            </div>
+
+            {/* Additional Info */}
+            <div className="text-center mt-12">
+              <p className="text-gray-400 mb-6">
+                Experience the power of OpenStream with our intuitive interface and seamless streaming
+              </p>
+              <div className="flex flex-wrap justify-center gap-4">
+                <Badge variant="secondary" className="bg-red-600/20 text-red-300 border-red-500/30">
+                  📱 Mobile Optimized
+                </Badge>
+                <Badge variant="secondary" className="bg-blue-600/20 text-blue-300 border-blue-500/30">
+                  🎬 4K Streaming
+                </Badge>
+                <Badge variant="secondary" className="bg-green-600/20 text-green-300 border-green-500/30">
+                  ⚡ Fast Loading
+                </Badge>
+                <Badge variant="secondary" className="bg-purple-600/20 text-purple-300 border-purple-500/30">
+                  🌐 Multi-Language
+                </Badge>
+              </div>
+            </div>
           </div>
         </div>
       </section>

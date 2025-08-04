@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useTheme } from "@/contexts/theme-context"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   Shield,
   BarChart3,
@@ -23,8 +25,8 @@ import {
 import { cn } from "@/lib/utils"
 
 interface SidebarProps {
-  activeTab: string
-  onTabChange: (tab: string) => void
+  activeTab?: string
+  onTabChange?: (tab: string) => void
   stats?: {
     activeCodes: number
     totalCodes: number
@@ -35,96 +37,148 @@ interface SidebarProps {
 export function Sidebar({ activeTab, onTabChange, stats }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { resolvedTheme } = useTheme()
+  const pathname = usePathname()
 
   const menuItems = [
     {
       id: "overview",
       label: "Overview",
       icon: BarChart3,
+      href: "/admin/overview",
       badge: stats?.activeCodes,
-      description: "Dashboard overview"
+      description: "Dashboard overview",
+      useRouting: true
     },
     {
-      id: "codes",
+      id: "access-codes",
       label: "Access Codes",
       icon: Key,
+      href: "/admin/access-codes",
       badge: stats?.activeCodes,
-      description: "Manage access codes"
+      description: "Manage access codes",
+      useRouting: true
     },
     {
-      id: "logs",
+      id: "recent-logs",
       label: "Recent Logs",
-      icon: Activity,
+      icon: Clock,
+      href: "/admin/recent-logs",
       badge: stats?.recentActivity,
-      description: "View recent logs"
+      description: "View recent logs",
+      useRouting: true
     },
     {
       id: "activity-logs",
       label: "Activity Logs",
       icon: Activity,
+      href: "/admin/activity-logs",
       badge: stats?.recentActivity,
-      description: "Advanced activity monitoring"
+      description: "Advanced activity monitoring",
+      useRouting: true
     },
     {
       id: "analytics",
       label: "Analytics",
       icon: TrendingUp,
-      description: "Advanced analytics and reporting"
+      href: "/admin/analytics",
+      description: "Advanced analytics and reporting",
+      useRouting: true
     },
     {
       id: "settings",
       label: "Settings",
       icon: Settings,
-      description: "System settings"
+      href: "/admin/settings",
+      description: "System settings",
+      useRouting: true
     }
   ]
 
   return (
     <div className={cn(
-      "flex flex-col h-full theme-bg-sidebar theme-border transition-all duration-300",
+      "flex flex-col h-screen theme-bg-sidebar border-r theme-border transition-all duration-300",
       isCollapsed ? "w-16" : "w-64"
     )}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 theme-border border-b">
+      {/* Header - Match main header height */}
+      <div className="h-16 flex items-center justify-between px-4 theme-border border-b shrink-0">
         {!isCollapsed && (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Shield className="h-5 w-5 text-white" />
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Shield className="h-4 w-4 text-white" />
             </div>
-            <div>
-              <h2 className="font-semibold theme-text-primary">Admin Panel</h2>
-              <p className="text-xs theme-text-secondary">Access Management</p>
+            <div className="min-w-0">
+              <h2 className="font-semibold theme-text-primary text-sm truncate">Admin Panel</h2>
+              <p className="text-xs theme-text-secondary truncate">Access Management</p>
             </div>
+          </div>
+        )}
+        {isCollapsed && (
+          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mx-auto">
+            <Shield className="h-4 w-4 text-white" />
           </div>
         )}
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="theme-text-secondary hover:theme-text-primary theme-transition"
+          className={cn(
+            "theme-text-secondary hover:theme-text-primary theme-transition h-8 w-8 p-0 flex-shrink-0",
+            isCollapsed && "hidden"
+          )}
         >
           {isCollapsed ? <Menu className="h-4 w-4" /> : <X className="h-4 w-4" />}
         </Button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon
-          const isActive = activeTab === item.id
-          
+          const isActive = pathname === item.href || (activeTab && activeTab === item.id)
+
+          // Use routing for dedicated pages, tab navigation for embedded content
+          if (item.useRouting) {
+            return (
+              <Link key={item.id} href={item.href}>
+                <Button
+                  variant={isActive ? "secondary" : "ghost"}
+                  className={cn(
+                    "w-full justify-start gap-3 h-10 theme-transition text-sm",
+                    isActive
+                      ? "theme-interactive-active"
+                      : "theme-text-secondary hover:theme-text-primary theme-interactive-hover",
+                    isCollapsed && "justify-center px-2"
+                  )}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  {!isCollapsed && (
+                    <>
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <Badge variant="secondary" className="ml-auto">
+                          {item.badge}
+                        </Badge>
+                      )}
+                    </>
+                  )}
+                </Button>
+              </Link>
+            )
+          }
+
+          // Use tab-based navigation for embedded content
           return (
             <Button
               key={item.id}
               variant={isActive ? "secondary" : "ghost"}
               className={cn(
-                "w-full justify-start gap-3 h-12 theme-transition",
+                "w-full justify-start gap-3 h-10 theme-transition text-sm",
                 isActive
                   ? "theme-interactive-active"
                   : "theme-text-secondary hover:theme-text-primary theme-interactive-hover",
-                isCollapsed && "justify-center"
+                isCollapsed && "justify-center px-2"
               )}
-              onClick={() => onTabChange(item.id)}
+              onClick={() => onTabChange?.(item.id)}
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
               {!isCollapsed && (
@@ -142,38 +196,38 @@ export function Sidebar({ activeTab, onTabChange, stats }: SidebarProps) {
         })}
       </nav>
 
-      <Separator className="bg-gray-800" />
+      <Separator className="theme-border" />
 
       {/* Stats Summary */}
       {!isCollapsed && stats && (
-        <div className="p-4 space-y-3">
-          <h3 className="text-sm font-medium text-gray-400">Quick Stats</h3>
+        <div className="p-3 space-y-3">
+          <h3 className="text-xs font-medium theme-text-secondary uppercase tracking-wide">Quick Stats</h3>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">Active Codes</span>
-              <span className="text-white font-medium">{stats.activeCodes}</span>
+              <span className="theme-text-secondary">Active Codes</span>
+              <span className="theme-text-primary font-medium">{stats.activeCodes}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">Total Generated</span>
-              <span className="text-white font-medium">{stats.totalCodes}</span>
+              <span className="theme-text-secondary">Total Generated</span>
+              <span className="theme-text-primary font-medium">{stats.totalCodes}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">Recent Activity</span>
-              <span className="text-white font-medium">{stats.recentActivity}</span>
+              <span className="theme-text-secondary">Recent Activity</span>
+              <span className="theme-text-primary font-medium">{stats.recentActivity}</span>
             </div>
           </div>
         </div>
       )}
 
-      <Separator className="bg-gray-800" />
+      <Separator className="theme-border" />
 
       {/* Footer */}
-      <div className="p-4 space-y-2">
+      <div className="p-3 space-y-1 mt-auto">
         <Button
           variant="ghost"
           className={cn(
-            "w-full justify-start gap-3 text-gray-400 hover:text-white",
-            isCollapsed && "justify-center"
+            "w-full justify-start gap-3 h-9 text-sm theme-text-secondary hover:theme-text-primary theme-transition",
+            isCollapsed && "justify-center px-2"
           )}
         >
           <HelpCircle className="h-4 w-4" />
@@ -182,8 +236,8 @@ export function Sidebar({ activeTab, onTabChange, stats }: SidebarProps) {
         <Button
           variant="ghost"
           className={cn(
-            "w-full justify-start gap-3 text-gray-400 hover:text-red-400",
-            isCollapsed && "justify-center"
+            "w-full justify-start gap-3 h-9 text-sm theme-text-secondary hover:text-red-500 theme-transition",
+            isCollapsed && "justify-center px-2"
           )}
         >
           <LogOut className="h-4 w-4" />

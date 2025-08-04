@@ -1,0 +1,37 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /private/
+
+# Allow specific admin login page for SEO (if needed)
+Allow: /admin$
+
+# Sitemap location
+Sitemap: https://openstream.app/sitemap.xml
+
+# Crawl delay (optional)
+Crawl-delay: 1
+
+# Specific rules for different bots
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+User-agent: facebookexternalhit
+Allow: /
+
+# Block admin areas from all crawlers
+User-agent: *
+Disallow: /admin/overview
+Disallow: /admin/access-codes
+Disallow: /admin/analytics
+Disallow: /admin/activity-logs
+Disallow: /admin/settings

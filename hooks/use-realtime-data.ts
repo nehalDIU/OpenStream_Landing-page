@@ -106,11 +106,17 @@ export function useRealtimeData({
     autoExpire: boolean
     maxUses?: number
   }) => {
+    if (!adminToken) {
+      const errorMsg = "Admin token is required for code generation"
+      console.error(errorMsg)
+      toast.error(errorMsg)
+      throw new Error(errorMsg)
+    }
+
     setLoading(true)
     try {
       console.log('=== CODE GENERATION DEBUG ===')
       console.log('Admin token:', adminToken ? `${adminToken.substring(0, 8)}...` : 'EMPTY')
-      console.log('Full admin token:', adminToken)
       console.log('Options:', options)
       console.log('API URL:', '/api/access-codes')
 
@@ -134,46 +140,54 @@ export function useRealtimeData({
 
       console.log(`Making ${promises.length} parallel requests...`)
       const responses = await Promise.all(promises)
-      
+
       console.log('Raw responses:', responses.map((r, i) => ({
         index: i,
         ok: r.ok,
         status: r.status,
         statusText: r.statusText
       })))
-      
+
       const results = await Promise.all(responses.map(async (r, index) => {
         try {
           const json = await r.json()
           console.log(`Response ${index}:`, { ok: r.ok, status: r.status, data: json })
           if (!r.ok) {
             console.error(`API call ${index} failed:`, json)
+            throw new Error(json.error || json.details || `HTTP ${r.status}: ${r.statusText}`)
           }
           return json
         } catch (parseError) {
           console.error(`Failed to parse response ${index}:`, parseError)
-          return { error: 'Failed to parse response' }
+          if (parseError instanceof Error && parseError.message.includes('HTTP')) {
+            throw parseError
+          }
+          throw new Error('Failed to parse API response')
         }
       }))
-      
-      const successfulResults = results.filter((result, index) => responses[index].ok)
+
+      const successfulResults = results.filter(result => result && result.code)
       console.log('Successful results:', successfulResults.length, 'out of', results.length)
-      console.log('Failed results:', results.filter((result, index) => !responses[index].ok))
-      
-      const generatedCodes = successfulResults.map(result => result.code)
-      
-      if (successfulResults.length > 0) {
-        console.log(`Successfully generated ${successfulResults.length} code(s)`)
-        await fetchData(false) // Refresh data
-        return generatedCodes
-      } else {
-        console.error('All API calls failed. No codes were generated.')
-        console.error('Failed responses:', results.filter((result, index) => !responses[index].ok))
-        throw new Error("All API calls failed. No codes were generated.")
+
+      if (successfulResults.length === 0) {
+        const errorMsg = "No codes were generated successfully"
+        console.error(errorMsg)
+        console.error('All results:', results)
+        throw new Error(errorMsg)
       }
+
+      const generatedCodes = successfulResults.map(result => result.code)
+      console.log(`Successfully generated ${successfulResults.length} code(s):`, generatedCodes)
+
+      // Refresh data after successful generation
+      await fetchData(false)
+      toast.success(`Successfully generated ${successfulResults.length} access code${successfulResults.length > 1 ? 's' : ''}`)
+
+      return generatedCodes
     } catch (error) {
       console.error('Code generation error:', error)
-      toast.error("Failed to generate codes")
+      const errorMessage = error instanceof Error ? error.message : "Failed to generate codes"
+      toast.error(errorMessage)
       throw error
     } finally {
       setLoading(false)

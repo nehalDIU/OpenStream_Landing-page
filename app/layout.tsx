@@ -3,6 +3,7 @@ import './globals.css'
 import '../styles/themes.css'
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from '@/contexts/theme-context'
+import { PerformanceOptimizations } from '@/components/performance/performance-monitor'
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -169,8 +170,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased">
+      <body className="antialiased" suppressHydrationWarning={true}>
         <ThemeProvider defaultTheme="system" storageKey="admin-theme">
+          <PerformanceOptimizations />
           <noscript>
             <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#1f2937', color: 'white' }}>
               <h1>JavaScript Required</h1>
