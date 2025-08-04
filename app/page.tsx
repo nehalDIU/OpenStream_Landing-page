@@ -406,6 +406,7 @@ export default function Home() {
                       title: "Advanced Player",
                       description: "Enjoy seamless playback with our advanced video player featuring quality controls and subtitle support"
                     }
+
                   ].map((item, index) => (
                     <CarouselItem key={index} className="min-w-0 shrink-0 grow-0 basis-full pl-2 md:pl-4 sm:basis-1/2 md:basis-1/3 lg:basis-1/4 xl:basis-1/4">
                       <div className="group relative">
