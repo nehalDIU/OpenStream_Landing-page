@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, AlertCircle, MessageCircle, X } from "lucide-react"
+import { Loader2, AlertCircle, MessageCircle } from "lucide-react"
 import { toast } from "sonner"
 
 interface AccessCodeDialogProps {
@@ -116,17 +116,10 @@ export const AccessCodeDialog = memo(function AccessCodeDialog({ open, onOpenCha
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md mx-auto p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-white">
+        <div className="mb-6">
+          <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-white text-center">
             Connect Server
           </DialogTitle>
-          <button
-            onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            aria-label="Close dialog"
-          >
-            <X className="h-5 w-5" />
-          </button>
         </div>
 
         {/* Description */}
