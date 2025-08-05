@@ -1,98 +1,70 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { useTheme } from "@/contexts/theme-context"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table"
 import { toast } from "sonner"
-import { exportActivityLogs } from "@/lib/export-utils"
-import { DatabaseService } from "@/lib/supabase"
 import {
   Search,
-  Filter,
   Download,
   RefreshCw,
-  Calendar,
   Clock,
-  User,
   Activity,
-  AlertCircle,
   CheckCircle,
   XCircle,
-  Eye,
-  EyeOff,
-  ChevronDown,
-  ChevronUp,
-  MoreHorizontal,
-  Trash2,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
   X
 } from "lucide-react"
-import { ActivityLogsTable } from "./activity-logs-table"
-import { ActivityLogsFilters } from "./activity-logs-filters"
-import {
-  ActivityLogsSkeleton,
-  ActivityLogsErrorBoundary,
-  useScreenReaderAnnouncements,
-  useKeyboardShortcuts,
-  useDebounce,
-  KEYBOARD_SHORTCUTS
-} from "./activity-logs-accessibility"
-import type { 
-  ActivityLogEntry, 
-  ActivityLogFilters, 
-  ActivityLogQueryOptions,
-  SortConfig,
-  PaginationConfig 
-} from "@/types/activity-logs"
 
 interface ActivityLogsProps {
   adminToken: string
   className?: string
 }
 
+interface ActivityLog {
+  id: string
+  action: string
+  code: string
+  timestamp: string
+  ip_address?: string
+  user_agent?: string
+  details?: string
+  success?: boolean
+}
+
 interface ActivityLogsState {
-  logs: ActivityLogEntry[]
+  logs: ActivityLog[]
   loading: boolean
   error: string | null
   total: number
-  filters: ActivityLogFilters
   search: string
-  sort: SortConfig
-  pagination: PaginationConfig
-  selectedLogs: string[]
-  expandedRows: string[]
+  currentPage: number
+  pageSize: number
 }
 
 export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
-  const { resolvedTheme } = useTheme()
-  const { announce, AnnouncementRegion } = useScreenReaderAnnouncements()
-
-  // Debounce search to improve performance
   const [searchInput, setSearchInput] = useState("")
-  const debouncedSearch = useDebounce(searchInput, 300)
 
-  // Filters visibility state
-  const [showFilters, setShowFilters] = useState(false)
-  
   const [state, setState] = useState<ActivityLogsState>({
     logs: [],
     loading: false,
     error: null,
     total: 0,
-    filters: {},
     search: "",
-    sort: { field: 'timestamp', direction: 'desc' },
-    pagination: { 
-      page: 1, 
-      pageSize: 50, 
-      showSizeOptions: true, 
-      sizeOptions: [25, 50, 100, 200],
-      showQuickJumper: true 
-    },
-    selectedLogs: [],
-    expandedRows: []
+    currentPage: 1,
+    pageSize: 25
   })
 
   // Fetch activity logs
@@ -103,27 +75,11 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
 
     try {
       const queryParams = new URLSearchParams({
-        page: state.pagination.page.toString(),
-        limit: state.pagination.pageSize.toString(),
-        sortBy: state.sort.field,
-        sortOrder: state.sort.direction,
-        includeAggregations: 'true'
+        page: state.currentPage.toString(),
+        limit: state.pageSize.toString(),
+        sortBy: 'timestamp',
+        sortOrder: 'desc'
       })
-
-      // Add filters to query params
-      if (state.filters.dateRange) {
-        queryParams.append('startDate', state.filters.dateRange.start.toString())
-        queryParams.append('endDate', state.filters.dateRange.end.toString())
-      }
-
-      if (state.filters.activityTypes) {
-        const activeTypes = Object.entries(state.filters.activityTypes)
-          .filter(([_, active]) => active)
-          .map(([type, _]) => type)
-        if (activeTypes.length > 0) {
-          queryParams.append('actions', activeTypes.join(','))
-        }
-      }
 
       if (state.search) {
         queryParams.append('search', state.search)
@@ -140,7 +96,7 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
       }
 
       const data = await response.json()
-      
+
       setState(prev => ({
         ...prev,
         logs: data.data || [],
@@ -149,7 +105,7 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
       }))
 
       if (showToast) {
-        toast.success('Activity logs refreshed successfully')
+        toast.success('Activity logs refreshed')
       }
 
     } catch (error) {
@@ -157,197 +113,69 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
       setState(prev => ({ ...prev, error: errorMessage, loading: false }))
       toast.error(errorMessage)
     }
-  }, [adminToken, state.pagination.page, state.pagination.pageSize, state.sort, state.filters, state.search])
+  }, [adminToken, state.currentPage, state.pageSize, state.search])
 
   // Initial load and refresh when dependencies change
   useEffect(() => {
     fetchLogs()
   }, [fetchLogs])
 
-  // Real-time updates
-  useEffect(() => {
-    if (!adminToken) return
-
-    // Subscribe to activity logs changes
-    const subscription = DatabaseService.subscribeToActivityLogs((payload) => {
-      console.log('Activity log change detected:', payload)
-
-      const { eventType, new: newRecord, old: oldRecord } = payload
-
-      if (eventType === 'INSERT' && newRecord) {
-        // Add new log to the beginning of the list
-        setState(prev => ({
-          ...prev,
-          logs: [newRecord, ...prev.logs].slice(0, prev.pagination.pageSize),
-          total: prev.total + 1
-        }))
-
-        // Show toast notification for new activity
-        const actionDisplay = getActionDisplay(newRecord.action)
-        toast.info(`New activity: ${actionDisplay.label} for code ${newRecord.code}`, {
-          duration: 3000,
-          action: {
-            label: 'View',
-            onClick: () => {
-              // Expand the new row
-              setState(prev => ({
-                ...prev,
-                expandedRows: [...prev.expandedRows, newRecord.id]
-              }))
-            }
-          }
-        })
-      } else if (eventType === 'UPDATE' && newRecord) {
-        // Update existing log
-        setState(prev => ({
-          ...prev,
-          logs: prev.logs.map(log =>
-            log.id === newRecord.id ? { ...log, ...newRecord } : log
-          )
-        }))
-      } else if (eventType === 'DELETE' && oldRecord) {
-        // Remove deleted log
-        setState(prev => ({
-          ...prev,
-          logs: prev.logs.filter(log => log.id !== oldRecord.id),
-          total: Math.max(0, prev.total - 1)
-        }))
-      }
-    }, state.filters)
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [adminToken, state.filters])
-
-  // Auto-refresh every 30 seconds as fallback
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchLogs(false)
-    }, 30000)
-
-    return () => clearInterval(interval)
-  }, [fetchLogs])
-
   // Handle search with debouncing
   useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setState(prev => ({
+        ...prev,
+        search: searchInput,
+        currentPage: 1
+      }))
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchInput])
+
+  // Handle pagination
+  const handlePageChange = useCallback((newPage: number) => {
     setState(prev => ({
       ...prev,
-      search: debouncedSearch,
-      pagination: { ...prev.pagination, page: 1 }
-    }))
-  }, [debouncedSearch])
-
-  const handleSearchInput = useCallback((searchTerm: string) => {
-    setSearchInput(searchTerm)
-  }, [])
-
-  // Handle filter changes
-  const handleFiltersChange = useCallback((newFilters: Partial<ActivityLogFilters>) => {
-    setState(prev => ({
-      ...prev,
-      filters: { ...prev.filters, ...newFilters },
-      pagination: { ...prev.pagination, page: 1 }
+      currentPage: newPage
     }))
   }, [])
-
-  // Handle sort changes
-  const handleSort = useCallback((field: keyof ActivityLogEntry) => {
-    setState(prev => ({
-      ...prev,
-      sort: {
-        field,
-        direction: prev.sort.field === field && prev.sort.direction === 'asc' ? 'desc' : 'asc'
-      },
-      pagination: { ...prev.pagination, page: 1 }
-    }))
-  }, [])
-
-  // Handle pagination changes
-  const handlePaginationChange = useCallback((changes: Partial<PaginationConfig>) => {
-    setState(prev => ({
-      ...prev,
-      pagination: { ...prev.pagination, ...changes }
-    }))
-  }, [])
-
-  // Handle row selection
-  const handleRowSelection = useCallback((logId: string) => {
-    setState(prev => ({
-      ...prev,
-      selectedLogs: prev.selectedLogs.includes(logId)
-        ? prev.selectedLogs.filter(id => id !== logId)
-        : [...prev.selectedLogs, logId]
-    }))
-  }, [])
-
-  // Handle row expansion
-  const handleRowExpansion = useCallback((logId: string) => {
-    setState(prev => ({
-      ...prev,
-      expandedRows: prev.expandedRows.includes(logId)
-        ? prev.expandedRows.filter(id => id !== logId)
-        : [...prev.expandedRows, logId]
-    }))
-  }, [])
-
-  // Handle select all
-  const handleSelectAll = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      selectedLogs: state.logs.map(log => log.id)
-    }))
-  }, [state.logs])
-
-  // Handle clear selection
-  const handleClearSelection = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      selectedLogs: []
-    }))
-  }, [])
-
-  // Handle reset filters
-  const handleResetFilters = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      filters: {},
-      search: "",
-      pagination: { ...prev.pagination, page: 1 }
-    }))
-    setSearchInput("")
-  }, [])
-
-  // Toggle filters visibility
-  const toggleFilters = useCallback(() => {
-    setShowFilters(prev => !prev)
-  }, [])
-
-  // Count active filters
-  const getActiveFilterCount = useCallback(() => {
-    let count = 0
-    if (state.filters.dateRange) count++
-    if (state.filters.activityTypes && Object.values(state.filters.activityTypes).some(Boolean)) count++
-    if (state.filters.searchTerm) count++
-    if (state.filters.users && Object.values(state.filters.users).some(arr => arr.length > 0)) count++
-    if (state.filters.status) count++
-    if (state.filters.codes && state.filters.codes.length > 0) count++
-    return count
-  }, [state.filters])
-
-  const activeFilterCount = getActiveFilterCount()
 
   // Export functionality
-  const handleExport = useCallback(async (format: 'csv' | 'json') => {
+  const handleExport = useCallback(async () => {
     try {
       setState(prev => ({ ...prev, loading: true }))
 
-      await exportActivityLogs(adminToken, format, state.filters, {
-        includeMetadata: true,
-        maxRows: 10000
+      const queryParams = new URLSearchParams({
+        format: 'csv',
+        limit: '1000'
       })
 
-      toast.success(`Activity logs exported as ${format.toUpperCase()}`)
+      if (state.search) {
+        queryParams.append('search', state.search)
+      }
+
+      const response = await fetch(`/api/activity-logs/export?${queryParams}`, {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Export failed')
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `activity-logs-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success('Activity logs exported successfully')
 
     } catch (error) {
       console.error('Export error:', error)
@@ -355,21 +183,46 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
     } finally {
       setState(prev => ({ ...prev, loading: false }))
     }
-  }, [adminToken, state.filters])
+  }, [adminToken, state.search])
 
-  // Get action icon and color
+  // Get action display info
   const getActionDisplay = (action: string) => {
     switch (action) {
       case 'generated':
-        return { icon: Activity, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20' }
+        return {
+          icon: Activity,
+          color: 'text-blue-600',
+          bg: 'bg-blue-50',
+          label: 'Generated'
+        }
       case 'used':
-        return { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50 dark:bg-green-900/20' }
+        return {
+          icon: CheckCircle,
+          color: 'text-green-600',
+          bg: 'bg-green-50',
+          label: 'Used'
+        }
       case 'expired':
-        return { icon: Clock, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20' }
+        return {
+          icon: Clock,
+          color: 'text-orange-600',
+          bg: 'bg-orange-50',
+          label: 'Expired'
+        }
       case 'revoked':
-        return { icon: XCircle, color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' }
+        return {
+          icon: XCircle,
+          color: 'text-red-600',
+          bg: 'bg-red-50',
+          label: 'Revoked'
+        }
       default:
-        return { icon: AlertCircle, color: 'text-gray-500', bg: 'bg-gray-50 dark:bg-gray-900/20' }
+        return {
+          icon: AlertCircle,
+          color: 'text-gray-600',
+          bg: 'bg-gray-50',
+          label: 'Unknown'
+        }
     }
   }
 
@@ -378,7 +231,7 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
     const date = new Date(timestamp)
     return {
       date: date.toLocaleDateString(),
-      time: date.toLocaleTimeString(),
+      time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       relative: getTimeAgo(date)
     }
   }
@@ -397,76 +250,48 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
     return `${diffDays}d ago`
   }
 
-  // Keyboard shortcuts
-  useKeyboardShortcuts({
-    [KEYBOARD_SHORTCUTS.REFRESH]: () => fetchLogs(true),
-    [KEYBOARD_SHORTCUTS.EXPORT_CSV]: () => handleExport('csv'),
-    [KEYBOARD_SHORTCUTS.EXPORT_JSON]: () => handleExport('json'),
-    [KEYBOARD_SHORTCUTS.TOGGLE_FILTERS]: toggleFilters,
-    [`Ctrl+${KEYBOARD_SHORTCUTS.SELECT_ALL}`]: handleSelectAll,
-    [KEYBOARD_SHORTCUTS.CLEAR_SELECTION]: handleClearSelection
-  })
+  // Calculate pagination
+  const totalPages = Math.ceil(state.total / state.pageSize)
+  const startItem = (state.currentPage - 1) * state.pageSize + 1
+  const endItem = Math.min(state.currentPage * state.pageSize, state.total)
 
   return (
-    <ActivityLogsErrorBoundary>
-      <div className={`space-y-6 ${className}`} role="main" aria-label="Activity Logs">
-        <AnnouncementRegion />
-
-        {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex-1">
-          <h2 className="text-2xl font-bold theme-text-primary">Activity Logs</h2>
-          <p className="theme-text-secondary">
-            Monitor and analyze system activity with advanced filtering and search
+    <div className={`space-y-6 ${className}`}>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Activity Logs</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Monitor system activity and access codes usage
           </p>
         </div>
 
-        {/* Quick Search Bar */}
-        <div className="flex items-center gap-3 lg:min-w-96">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 theme-text-secondary" />
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Quick search logs..."
+              placeholder="Search logs..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-10 theme-input"
+              className="pl-10 w-64"
             />
             {searchInput && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setSearchInput("")}
-                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
               >
                 <X className="h-3 w-3" />
               </Button>
             )}
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={toggleFilters}
-            className={`theme-button-secondary ${showFilters ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' : ''}`}
-          >
-            <Filter className="h-4 w-4 mr-2" />
-            Filters
-            {activeFilterCount > 0 && (
-              <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 text-xs flex items-center justify-center">
-                {activeFilterCount}
-              </Badge>
-            )}
-            <ChevronDown className={`h-4 w-4 ml-1 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-          </Button>
 
           <Button
             variant="outline"
             size="sm"
             onClick={() => fetchLogs(true)}
             disabled={state.loading}
-            className="theme-button-secondary"
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${state.loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -475,114 +300,208 @@ export function ActivityLogs({ adminToken, className }: ActivityLogsProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleExport('csv')}
+            onClick={handleExport}
             disabled={state.loading}
-            className="theme-button-secondary"
           >
             <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleExport('json')}
-            disabled={state.loading}
-            className="theme-button-secondary"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export JSON
+            Export
           </Button>
         </div>
       </div>
 
-      {/* Collapsible Filters */}
-      {showFilters && (
-        <div className="animate-in slide-in-from-top-2 duration-200">
-          <ActivityLogsFilters
-            filters={state.filters}
-            onFiltersChange={handleFiltersChange}
-            onReset={handleResetFilters}
-            onClose={toggleFilters}
-          />
-        </div>
-      )}
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Logs</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{state.total.toLocaleString()}</p>
+              </div>
+              <Activity className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Stats Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="theme-bg-card theme-border">
-          <CardContent className="p-4">
+        <Card>
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm theme-text-secondary">
-                  Total Logs
-                  {activeFilterCount > 0 && (
-                    <Badge variant="secondary" className="ml-2 text-xs">
-                      Filtered
-                    </Badge>
-                  )}
-                </p>
-                <p className="text-2xl font-bold theme-text-primary">{state.total.toLocaleString()}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Current Page</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{state.currentPage} of {totalPages}</p>
               </div>
-              <Activity className="h-8 w-8 theme-text-accent" />
+              <div className="h-8 w-8 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">{state.currentPage}</span>
+              </div>
             </div>
           </CardContent>
         </Card>
-        
-        <Card className="theme-bg-card theme-border">
-          <CardContent className="p-4">
+
+        <Card>
+          <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm theme-text-secondary">Current Page</p>
-                <p className="text-2xl font-bold theme-text-primary">{state.pagination.page}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Showing</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{startItem}-{endItem}</p>
               </div>
-              <Eye className="h-8 w-8 theme-text-accent" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="theme-bg-card theme-border">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm theme-text-secondary">Page Size</p>
-                <p className="text-2xl font-bold theme-text-primary">{state.pagination.pageSize}</p>
+              <div className="h-8 w-8 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
-              <User className="h-8 w-8 theme-text-accent" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="theme-bg-card theme-border">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm theme-text-secondary">Selected</p>
-                <p className="text-2xl font-bold theme-text-primary">{state.selectedLogs.length}</p>
-              </div>
-              <CheckCircle className="h-8 w-8 theme-text-accent" />
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Activity Logs Table */}
-      <ActivityLogsTable
-        logs={state.logs}
-        loading={state.loading}
-        total={state.total}
-        sort={state.sort}
-        pagination={state.pagination}
-        selectedLogs={state.selectedLogs}
-        expandedRows={state.expandedRows}
-        onSort={handleSort}
-        onPaginationChange={handlePaginationChange}
-        onRowSelection={handleRowSelection}
-        onRowExpansion={handleRowExpansion}
-        onSelectAll={handleSelectAll}
-        onClearSelection={handleClearSelection}
-      />
-      </div>
-    </ActivityLogsErrorBoundary>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {state.loading ? (
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Loading activity logs...
+              </div>
+            </div>
+          ) : state.error ? (
+            <div className="p-8 text-center">
+              <div className="text-red-600 dark:text-red-400">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                <p className="font-medium">Error loading logs</p>
+                <p className="text-sm">{state.error}</p>
+              </div>
+            </div>
+          ) : state.logs.length === 0 ? (
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+              <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No activity logs found</p>
+              {state.search && <p className="text-sm">Try adjusting your search terms</p>}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[120px]">Action</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead>IP Address</TableHead>
+                    <TableHead className="w-[100px]">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {state.logs.map((log) => {
+                    const actionDisplay = getActionDisplay(log.action)
+                    const timestamp = formatTimestamp(log.timestamp)
+                    const IconComponent = actionDisplay.icon
+
+                    return (
+                      <TableRow key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded-lg ${actionDisplay.bg}`}>
+                              <IconComponent className={`h-4 w-4 ${actionDisplay.color}`} />
+                            </div>
+                            <span className="font-medium text-sm">{actionDisplay.label}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm font-mono">
+                            {log.code}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {timestamp.date} {timestamp.time}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {timestamp.relative}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-gray-600 dark:text-gray-400 font-mono">
+                            {log.ip_address || 'N/A'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={log.success === false ? "destructive" : "default"}
+                            className="text-xs"
+                          >
+                            {log.success === false ? 'Failed' : 'Success'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Pagination */}
+      {state.total > state.pageSize && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Showing {startItem} to {endItem} of {state.total.toLocaleString()} results
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(state.currentPage - 1)}
+              disabled={state.currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (state.currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (state.currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = state.currentPage - 2 + i
+                }
+
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={pageNum === state.currentPage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNum)}
+                    className="w-8 h-8 p-0"
+                  >
+                    {pageNum}
+                  </Button>
+                )
+              })}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(state.currentPage + 1)}
+              disabled={state.currentPage === totalPages}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

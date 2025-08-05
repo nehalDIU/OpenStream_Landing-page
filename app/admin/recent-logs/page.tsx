@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRealtimeData } from "@/hooks/use-realtime-data"
-import { useTheme } from "@/contexts/theme-context"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -11,15 +10,13 @@ import { toast } from "sonner"
 import {
   RefreshCw,
   Search,
-  Filter,
   Download,
   Clock,
   Activity,
-  Eye,
-  AlertCircle,
   CheckCircle,
   XCircle,
-  Zap
+  AlertCircle,
+  X
 } from "lucide-react"
 import {
   Table,
@@ -29,16 +26,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
-} from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
 
 interface UsageLog {
   id: string
@@ -52,10 +39,8 @@ interface UsageLog {
 
 export default function RecentLogsPage() {
   const [adminToken, setAdminToken] = useState("")
+  const [searchInput, setSearchInput] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedActions, setSelectedActions] = useState<Set<string>>(new Set(['generated', 'used', 'expired', 'revoked']))
-  const [timeFilter, setTimeFilter] = useState<string>("all")
-  const { resolvedTheme } = useTheme()
 
   // Get admin token from localStorage
   useEffect(() => {
@@ -73,102 +58,115 @@ export default function RecentLogsPage() {
 
   const logs = adminData?.usageLogs || []
 
-  // Filter logs based on search and filters
+  // Handle search with debouncing
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setSearchTerm(searchInput)
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchInput])
+
+  // Filter logs based on search
   const filteredLogs = logs.filter(log => {
-    const matchesSearch = !searchTerm || 
-      log.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.details?.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesAction = selectedActions.has(log.action)
-    
-    let matchesTime = true
-    if (timeFilter !== "all") {
-      const logTime = new Date(log.timestamp)
-      const now = new Date()
-      const diffHours = (now.getTime() - logTime.getTime()) / (1000 * 60 * 60)
-      
-      switch (timeFilter) {
-        case "1h":
-          matchesTime = diffHours <= 1
-          break
-        case "24h":
-          matchesTime = diffHours <= 24
-          break
-        case "7d":
-          matchesTime = diffHours <= 168
-          break
-      }
-    }
-    
-    return matchesSearch && matchesAction && matchesTime
+    if (!searchTerm) return true
+
+    return log.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           log.details?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           log.ip_address?.toLowerCase().includes(searchTerm.toLowerCase())
   })
 
-  const getActionIcon = (action: string) => {
+  // Get action display info
+  const getActionDisplay = (action: string) => {
     switch (action) {
       case 'generated':
-        return <Zap className="h-4 w-4 text-blue-500" />
+        return {
+          icon: Activity,
+          color: 'text-blue-600',
+          bg: 'bg-blue-50',
+          label: 'Generated'
+        }
       case 'used':
-        return <CheckCircle className="h-4 w-4 text-green-500" />
+        return {
+          icon: CheckCircle,
+          color: 'text-green-600',
+          bg: 'bg-green-50',
+          label: 'Used'
+        }
       case 'expired':
-        return <Clock className="h-4 w-4 text-orange-500" />
+        return {
+          icon: Clock,
+          color: 'text-orange-600',
+          bg: 'bg-orange-50',
+          label: 'Expired'
+        }
       case 'revoked':
-        return <XCircle className="h-4 w-4 text-red-500" />
+        return {
+          icon: XCircle,
+          color: 'text-red-600',
+          bg: 'bg-red-50',
+          label: 'Revoked'
+        }
       default:
-        return <Activity className="h-4 w-4 text-gray-500" />
+        return {
+          icon: AlertCircle,
+          color: 'text-gray-600',
+          bg: 'bg-gray-50',
+          label: 'Unknown'
+        }
     }
   }
 
-  const getActionBadge = (action: string) => {
-    const variants = {
-      generated: "default",
-      used: "default",
-      expired: "secondary",
-      revoked: "destructive"
-    } as const
-    
-    return (
-      <Badge variant={variants[action as keyof typeof variants] || "secondary"}>
-        {action}
-      </Badge>
-    )
-  }
-
+  // Export functionality
   const exportLogs = () => {
-    const csvContent = [
-      ['Timestamp', 'Code', 'Action', 'Details', 'IP Address'].join(','),
-      ...filteredLogs.map(log => [
-        log.timestamp,
-        log.code,
-        log.action,
-        log.details || '',
-        log.ip_address || ''
-      ].join(','))
-    ].join('\n')
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `recent-logs-${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-    toast.success("Logs exported successfully")
+    try {
+      const csvContent = [
+        ['Timestamp', 'Code', 'Action', 'Details', 'IP Address'].join(','),
+        ...filteredLogs.slice(0, 1000).map(log => [
+          log.timestamp,
+          log.code,
+          log.action,
+          log.details || '',
+          log.ip_address || ''
+        ].join(','))
+      ].join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `recent-logs-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success("Recent logs exported successfully")
+    } catch (error) {
+      toast.error("Failed to export logs")
+    }
   }
 
+  // Format timestamp
   const formatTimestamp = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString()
+    const date = new Date(timestamp)
+    return {
+      date: date.toLocaleDateString(),
+      time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      relative: getTimeAgo(date)
+    }
   }
 
-  const formatTimeAgo = (timestamp: string) => {
+  // Get time ago helper
+  const getTimeAgo = (date: Date) => {
     const now = new Date()
-    const logTime = new Date(timestamp)
-    const diffMs = now.getTime() - logTime.getTime()
-    const diffMins = Math.floor(diffMs / (1000 * 60))
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    
-    if (diffMins < 1) return "Just now"
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return 'Just now'
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffHours < 24) return `${diffHours}h ago`
     return `${diffDays}d ago`
@@ -176,202 +174,184 @@ export default function RecentLogsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg flex items-center justify-center">
-            <Activity className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold theme-text-primary">Recent Logs</h1>
-            <p className="text-sm theme-text-secondary">
-              View and filter recent system activity
-            </p>
-          </div>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Recent Logs</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            View recent system activity and usage logs
+          </p>
         </div>
-        
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="ml-2">
-            {filteredLogs.length} logs
-          </Badge>
+
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search logs..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="pl-10 w-64"
+            />
+            {searchInput && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearchInput("")}
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshData}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportLogs}
+            disabled={filteredLogs.length === 0}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
         </div>
       </div>
 
-      {/* Filters and Search */}
-      <Card className="theme-bg-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filters & Search
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 theme-text-secondary" />
-                <Input
-                  placeholder="Search logs by code, action, or details..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Logs</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{logs.length.toLocaleString()}</p>
+              </div>
+              <Activity className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Filtered Results</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{filteredLogs.length.toLocaleString()}</p>
+              </div>
+              <div className="h-8 w-8 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
             </div>
-            
-            {/* Time Filter */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="min-w-[120px]">
-                  <Clock className="h-4 w-4 mr-2" />
-                  {timeFilter === "all" ? "All Time" : 
-                   timeFilter === "1h" ? "Last Hour" :
-                   timeFilter === "24h" ? "Last 24h" : "Last 7 days"}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuLabel>Time Range</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setTimeFilter("all")}>
-                  All Time
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTimeFilter("1h")}>
-                  Last Hour
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTimeFilter("24h")}>
-                  Last 24 Hours
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTimeFilter("7d")}>
-                  Last 7 Days
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            {/* Action Filter */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                  <Filter className="h-4 w-4 mr-2" />
-                  Actions ({selectedActions.size})
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuLabel>Filter by Action</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {['generated', 'used', 'expired', 'revoked'].map((action) => (
-                  <DropdownMenuCheckboxItem
-                    key={action}
-                    checked={selectedActions.has(action)}
-                    onCheckedChange={(checked) => {
-                      const newSelected = new Set(selectedActions)
-                      if (checked) {
-                        newSelected.add(action)
-                      } else {
-                        newSelected.delete(action)
-                      }
-                      setSelectedActions(newSelected)
-                    }}
-                  >
-                    {action.charAt(0).toUpperCase() + action.slice(1)}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            {/* Export Button */}
-            <Button
-              onClick={exportLogs}
-              variant="outline"
-              disabled={filteredLogs.length === 0}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-            
-            {/* Refresh Button */}
-            <Button
-              onClick={refreshData}
-              variant="outline"
-              disabled={loading}
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Logs Table */}
-      <Card className="theme-bg-card">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Auto Refresh</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">30s</p>
+              </div>
+              <div className="h-8 w-8 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
+                <RefreshCw className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Logs Table */}
+      <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Recent Activity Logs
-            <Badge variant="secondary" className="ml-2">
-              {filteredLogs.length}
-            </Badge>
-          </CardTitle>
-          <CardDescription>
-            Latest system activity and usage logs
-          </CardDescription>
+          <CardTitle className="text-lg font-semibold">Recent Activity</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="h-6 w-6 animate-spin theme-text-secondary" />
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Loading recent logs...
+              </div>
+            </div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <div className="text-red-600 dark:text-red-400">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                <p className="font-medium">Error loading logs</p>
+                <p className="text-sm">{error}</p>
+              </div>
             </div>
           ) : filteredLogs.length === 0 ? (
-            <div className="text-center py-8 theme-text-secondary">
-              <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No logs found matching your filters</p>
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+              <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No recent logs found</p>
+              {searchTerm && <p className="text-sm">Try adjusting your search terms</p>}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Time</TableHead>
+                    <TableHead className="w-[120px]">Action</TableHead>
                     <TableHead>Code</TableHead>
-                    <TableHead>Action</TableHead>
+                    <TableHead>Timestamp</TableHead>
                     <TableHead>Details</TableHead>
                     <TableHead>IP Address</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLogs.slice(0, 100).map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">
-                            {formatTimeAgo(log.timestamp)}
+                  {filteredLogs.slice(0, 50).map((log) => {
+                    const actionDisplay = getActionDisplay(log.action)
+                    const timestamp = formatTimestamp(log.timestamp)
+                    const IconComponent = actionDisplay.icon
+
+                    return (
+                      <TableRow key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded-lg ${actionDisplay.bg}`}>
+                              <IconComponent className={`h-4 w-4 ${actionDisplay.color}`} />
+                            </div>
+                            <span className="font-medium text-sm">{actionDisplay.label}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm font-mono">
+                            {log.code}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {timestamp.date} {timestamp.time}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {timestamp.relative}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">
+                            {log.details || 'N/A'}
                           </span>
-                          <span className="text-xs theme-text-secondary">
-                            {formatTimestamp(log.timestamp)}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-gray-600 dark:text-gray-400 font-mono">
+                            {log.ip_address || 'N/A'}
                           </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm">
-                          {log.code}
-                        </code>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getActionIcon(log.action)}
-                          {getActionBadge(log.action)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm theme-text-secondary">
-                          {log.details || '-'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm theme-text-secondary font-mono">
-                          {log.ip_address || '-'}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>
