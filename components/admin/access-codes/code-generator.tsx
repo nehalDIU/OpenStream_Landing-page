@@ -45,6 +45,9 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
   const [customUsageLimit, setCustomUsageLimit] = useState<string>("")
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [lastGenerated, setLastGenerated] = useState<string[]>([])
+  const [selectedDuration, setSelectedDuration] = useState<string>("10")
+  const [customDuration, setCustomDuration] = useState<string>("")
+  const [customDurationUnit, setCustomDurationUnit] = useState<string>("minutes")
   const { resolvedTheme } = useTheme()
 
   const presetDurations = [
@@ -53,7 +56,16 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
     { label: "30 minutes", value: 30 },
     { label: "1 hour", value: 60 },
     { label: "4 hours", value: 240 },
-    { label: "24 hours", value: 1440 }
+    { label: "12 hours", value: 720 },
+    { label: "24 hours", value: 1440 },
+    { label: "3 days", value: 4320 },
+    { label: "1 week", value: 10080 },
+    { label: "2 weeks", value: 20160 },
+    { label: "1 month", value: 43200 },
+    { label: "3 months", value: 129600 },
+    { label: "6 months", value: 259200 },
+    { label: "1 year", value: 525600 },
+    { label: "Custom", value: "custom" }
   ]
 
   const presetUsageLimits = [
@@ -67,6 +79,51 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
     { label: "100 uses", value: "100" },
     { label: "Custom", value: "custom" }
   ]
+
+  const handleDurationChange = (value: string) => {
+    setSelectedDuration(value)
+
+    if (value === "custom") {
+      // Calculate duration from custom input
+      const customValue = customDuration ? parseInt(customDuration) : 10
+      const multiplier = customDurationUnit === "minutes" ? 1 :
+                        customDurationUnit === "hours" ? 60 :
+                        customDurationUnit === "days" ? 1440 :
+                        customDurationUnit === "weeks" ? 10080 :
+                        customDurationUnit === "months" ? 43200 : 525600 // years
+      setDuration(customValue * multiplier)
+    } else {
+      // Use preset value
+      const numericValue = parseInt(value)
+      setDuration(isNaN(numericValue) ? 10 : numericValue)
+    }
+  }
+
+  const handleCustomDurationChange = (value: string) => {
+    setCustomDuration(value)
+    if (selectedDuration === "custom") {
+      const customValue = value ? parseInt(value) : 10
+      const multiplier = customDurationUnit === "minutes" ? 1 :
+                        customDurationUnit === "hours" ? 60 :
+                        customDurationUnit === "days" ? 1440 :
+                        customDurationUnit === "weeks" ? 10080 :
+                        customDurationUnit === "months" ? 43200 : 525600 // years
+      setDuration(customValue * multiplier)
+    }
+  }
+
+  const handleCustomDurationUnitChange = (value: string) => {
+    setCustomDurationUnit(value)
+    if (selectedDuration === "custom" && customDuration) {
+      const customValue = parseInt(customDuration)
+      const multiplier = value === "minutes" ? 1 :
+                        value === "hours" ? 60 :
+                        value === "days" ? 1440 :
+                        value === "weeks" ? 10080 :
+                        value === "months" ? 43200 : 525600 // years
+      setDuration(customValue * multiplier)
+    }
+  }
 
   const handleUsageLimitChange = (value: string) => {
     setSelectedUsageLimit(value)
@@ -180,7 +237,7 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
               <Label htmlFor="duration" className="theme-text-secondary">
                 Expiration Duration
               </Label>
-              <Select value={duration.toString()} onValueChange={(value) => setDuration(parseInt(value))}>
+              <Select value={selectedDuration} onValueChange={handleDurationChange}>
                 <SelectTrigger className="theme-input theme-transition">
                   <SelectValue />
                 </SelectTrigger>
@@ -194,6 +251,36 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Custom Duration Input */}
+              {selectedDuration === "custom" && (
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="999999"
+                    placeholder="Enter duration"
+                    value={customDuration}
+                    onChange={(e) => handleCustomDurationChange(e.target.value)}
+                    className="theme-input theme-transition flex-1"
+                  />
+                  <Select value={customDurationUnit} onValueChange={handleCustomDurationUnitChange}>
+                    <SelectTrigger className="theme-input theme-transition w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={`theme-bg-card theme-border ${
+                      resolvedTheme === 'dark' ? 'bg-gray-800' : 'bg-white'
+                    }`}>
+                      <SelectItem value="minutes">Minutes</SelectItem>
+                      <SelectItem value="hours">Hours</SelectItem>
+                      <SelectItem value="days">Days</SelectItem>
+                      <SelectItem value="weeks">Weeks</SelectItem>
+                      <SelectItem value="months">Months</SelectItem>
+                      <SelectItem value="years">Years</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -317,10 +404,26 @@ export function CodeGenerator({ onGenerate, loading }: CodeGeneratorProps) {
             <Info className="h-4 w-4" />
             <AlertDescription>
               Codes will be 8 characters long and cryptographically secure.
-              {duration < 60 ?
-                ` They will expire in ${duration} minute${duration > 1 ? 's' : ''}.` :
-                ` They will expire in ${Math.floor(duration / 60)} hour${Math.floor(duration / 60) > 1 ? 's' : ''}.`
-              }
+              {(() => {
+                if (duration < 60) {
+                  return ` They will expire in ${duration} minute${duration > 1 ? 's' : ''}.`
+                } else if (duration < 1440) {
+                  const hours = Math.floor(duration / 60)
+                  return ` They will expire in ${hours} hour${hours > 1 ? 's' : ''}.`
+                } else if (duration < 10080) {
+                  const days = Math.floor(duration / 1440)
+                  return ` They will expire in ${days} day${days > 1 ? 's' : ''}.`
+                } else if (duration < 43200) {
+                  const weeks = Math.floor(duration / 10080)
+                  return ` They will expire in ${weeks} week${weeks > 1 ? 's' : ''}.`
+                } else if (duration < 525600) {
+                  const months = Math.floor(duration / 43200)
+                  return ` They will expire in ${months} month${months > 1 ? 's' : ''}.`
+                } else {
+                  const years = Math.floor(duration / 525600)
+                  return ` They will expire in ${years} year${years > 1 ? 's' : ''}.`
+                }
+              })()}
               {maxUses && (
                 ` Each code can be used ${maxUses} time${maxUses > 1 ? 's' : ''}.`
               )}

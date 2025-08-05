@@ -14,6 +14,7 @@ import {
   Zap,
   Clock,
   Users,
+  Calendar,
   Settings,
   RefreshCw,
   Download,
@@ -55,7 +56,10 @@ export function QuickActions({
           options = { duration: 10, prefix: "", quantity: 1, autoExpire: true }
           break
         case 'extended':
-          options = { duration: 60, prefix: "EXT", quantity: 1, autoExpire: false }
+          options = { duration: 1440, prefix: "EXT", quantity: 1, autoExpire: false } // 24 hours
+          break
+        case 'long-term':
+          options = { duration: 10080, prefix: "LT", quantity: 1, autoExpire: false } // 1 week
           break
         case 'bulk':
           options = { duration: 30, prefix: "BULK", quantity: 5, autoExpire: true }
@@ -96,10 +100,18 @@ export function QuickActions({
     {
       id: 'extended',
       title: 'Extended Code',
-      description: '1-hour reusable',
+      description: '24-hour reusable',
       icon: Users,
       color: 'from-purple-500 to-purple-600',
       action: () => handleQuickGenerate('extended')
+    },
+    {
+      id: 'long-term',
+      title: 'Long-term Code',
+      description: '1-week reusable',
+      icon: Calendar,
+      color: 'from-indigo-500 to-indigo-600',
+      action: () => handleQuickGenerate('long-term')
     },
     {
       id: 'bulk',
