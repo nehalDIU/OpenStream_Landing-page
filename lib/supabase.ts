@@ -208,17 +208,29 @@ export class DatabaseService {
   static async validateAccessCode(code: string, ipAddress?: string): Promise<{ valid: boolean; message: string; accessCode?: AccessCode }> {
     this.checkSupabaseClient()
 
-    // Get the access code
-    const { data: accessCode, error } = await supabase!
+    // First, check if the code exists at all (regardless of active status)
+    const { data: existingCode, error: existingError } = await supabase!
       .from('access_codes')
       .select('*')
       .eq('code', code.toUpperCase())
-      .eq('is_active', true)
       .single()
 
-    if (error || !accessCode) {
+    if (existingError || !existingCode) {
       return { valid: false, message: 'Invalid access code' }
     }
+
+    // If code exists but is not active, check why
+    if (!existingCode.is_active) {
+      // Check if it was used before
+      if (existingCode.used_at) {
+        return { valid: false, message: 'This Access code already used' }
+      }
+      // If not used but inactive, it might have been revoked or expired
+      return { valid: false, message: 'This Access code has expired' }
+    }
+
+    // Code exists and is active, proceed with normal validation
+    const accessCode = existingCode
 
     // Check usage limits
     const hasAdvancedSettings = accessCode.hasOwnProperty('auto_expire_on_use')
@@ -226,14 +238,14 @@ export class DatabaseService {
 
     // Check if max uses exceeded
     if (hasUsageTracking && accessCode.max_uses && accessCode.current_uses >= accessCode.max_uses) {
-      return { valid: false, message: `Access code has reached its usage limit (${accessCode.max_uses} uses)` }
+      return { valid: false, message: 'This Access code already used' }
     }
 
     // Check if already used (only for auto-expire codes or if advanced settings not available)
     const shouldCheckReuse = hasAdvancedSettings ? accessCode.auto_expire_on_use !== false : true // Default to one-time use
 
     if (accessCode.used_at && shouldCheckReuse && !hasUsageTracking) {
-      return { valid: false, message: 'Access code has already been used and cannot be reused' }
+      return { valid: false, message: 'This Access code already used' }
     }
 
     // Check if expired
@@ -243,7 +255,7 @@ export class DatabaseService {
     if (expiresAt < now) {
       // Mark as expired
       await this.deactivateAccessCode(code, 'expired')
-      return { valid: false, message: 'Access code has expired' }
+      return { valid: false, message: 'This Access code has expired' }
     }
 
     // Determine if code should be deactivated after use

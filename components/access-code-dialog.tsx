@@ -75,15 +75,29 @@ export const AccessCodeDialog = memo(function AccessCodeDialog({ open, onOpenCha
         // Handle both 400 responses and successful responses with valid: false
         const errorMessage = data.error || data.message || "Invalid access code"
         setError(errorMessage)
-        toast.error(errorMessage, {
-          description: "Please check your code and try again"
-        })
+
+        // Show specific toast messages based on error type
+        if (errorMessage.toLowerCase().includes('already used')) {
+          toast.error("Access Code Already Used", {
+            description: "This access code has been used before. Please get a new code from Telegram."
+          })
+        } else if (errorMessage.toLowerCase().includes('expired')) {
+          toast.error("Access Code Expired", {
+            description: "This access code has expired. Please get a new code from Telegram."
+          })
+        } else {
+          toast.error(errorMessage, {
+            description: "Please check your code and try again"
+          })
+        }
       }
     } catch (error) {
       console.error('Validation error:', error)
-      const errorMessage = "Failed to validate access code. Please check your connection and try again."
+      const errorMessage = "Connection failed. Please check your internet connection and try again."
       setError(errorMessage)
-      toast.error(errorMessage)
+      toast.error("Connection Error", {
+        description: errorMessage
+      })
     } finally {
       setIsValidating(false)
     }
@@ -241,17 +255,28 @@ export const AccessCodeDialog = memo(function AccessCodeDialog({ open, onOpenCha
               </div>
 
               {error && (
-                <Alert 
-                  variant="destructive" 
-                  className="border-red-200 dark:border-red-800 p-3 sm:p-4"
-                  role="alert"
-                  aria-live="polite"
-                >
-                  <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4" aria-hidden="true" />
-                  <AlertDescription className="text-xs sm:text-sm ml-1 sm:ml-0">
-                    {error}
-                  </AlertDescription>
-                </Alert>
+                <div className="space-y-3">
+                  <Alert
+                    variant="destructive"
+                    className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-3 sm:p-4"
+                    role="alert"
+                    aria-live="polite"
+                  >
+                    <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400" aria-hidden="true" />
+                    <AlertDescription className="text-sm sm:text-base ml-2 font-medium text-red-800 dark:text-red-200">
+                      {error}
+                    </AlertDescription>
+                  </Alert>
+
+                  {(error.toLowerCase().includes('already used') || error.toLowerCase().includes('expired')) && (
+                    <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 p-3 sm:p-4">
+                      <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                      <AlertDescription className="text-sm sm:text-base ml-2 text-blue-800 dark:text-blue-200">
+                        <strong>Need a new code?</strong> Join our Telegram community to get a fresh access code.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
               )}
 
               <div className="pt-2 sm:pt-3">
