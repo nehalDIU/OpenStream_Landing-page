@@ -20,7 +20,9 @@ import {
   Home,
   Users,
   Clock,
-  TrendingUp
+  TrendingUp,
+  Database,
+  Server
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -77,11 +79,35 @@ export function Sidebar({ activeTab, onTabChange, stats }: SidebarProps) {
       useRouting: true
     },
     {
+      id: "users",
+      label: "Users",
+      icon: Users,
+      href: "/admin/users",
+      description: "Track user activity and engagement",
+      useRouting: true
+    },
+    {
       id: "analytics",
       label: "Analytics",
       icon: TrendingUp,
       href: "/admin/analytics",
       description: "Advanced analytics and reporting",
+      useRouting: true
+    },
+    {
+      id: "test-data",
+      label: "Test Data",
+      icon: Database,
+      href: "/admin/test-data",
+      description: "Generate test user activity data",
+      useRouting: true
+    },
+    {
+      id: "database-status",
+      label: "Database Status",
+      icon: Server,
+      href: "/admin/database-status",
+      description: "Check Supabase connection and data",
       useRouting: true
     },
     {

@@ -16,6 +16,7 @@ import {
   Home,
   Key,
   Activity,
+  Users,
   BarChart3,
   HelpCircle,
   X
@@ -35,6 +36,7 @@ interface KeyboardShortcutsProps {
   onNavigateHome?: () => void
   onNavigateAccessCodes?: () => void
   onNavigateActivity?: () => void
+  onNavigateUsers?: () => void
   onNavigateAnalytics?: () => void
   onGenerateCode?: () => void
   onRefreshData?: () => void
@@ -47,6 +49,7 @@ export function KeyboardShortcuts({
   onNavigateHome,
   onNavigateAccessCodes,
   onNavigateActivity,
+  onNavigateUsers,
   onNavigateAnalytics,
   onGenerateCode,
   onRefreshData,
@@ -83,6 +86,14 @@ export function KeyboardShortcuts({
       action: () => onNavigateActivity?.(),
       category: "navigation",
       icon: Activity
+    },
+    {
+      id: "nav-users",
+      keys: ["g", "u"],
+      description: "Go to Users",
+      action: () => onNavigateUsers?.(),
+      category: "navigation",
+      icon: Users
     },
     {
       id: "nav-analytics",

@@ -161,6 +161,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const handleNavigateHome = () => router.push('/admin/overview')
   const handleNavigateAccessCodes = () => router.push('/admin/access-codes')
   const handleNavigateActivity = () => router.push('/admin/activity-logs')
+  const handleNavigateUsers = () => router.push('/admin/users')
   const handleNavigateAnalytics = () => router.push('/admin/analytics')
   const handleOpenSearch = () => setSearchOpen(true)
   const handleOpenSettings = () => router.push('/admin/settings')
@@ -387,6 +388,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 onNavigateHome={handleNavigateHome}
                 onNavigateAccessCodes={handleNavigateAccessCodes}
                 onNavigateActivity={handleNavigateActivity}
+                onNavigateUsers={handleNavigateUsers}
                 onNavigateAnalytics={handleNavigateAnalytics}
                 onGenerateCode={handleGenerateCode}
                 onRefreshData={handleRefreshData}
