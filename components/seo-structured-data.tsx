@@ -40,7 +40,7 @@ export const SoftwareApplicationData = {
     "@type": "Organization",
     name: "OpenStream Team"
   },
-  downloadUrl: "https://cloudstream-apk.com/wp-content/uploads/2025/04/4.5.2_(cloudstream-apk.com).apk",
+  downloadUrl: "https://pub-a06300a664b74991ac75dcfb3e99c047.r2.dev/Cloudstream-v4.7.0.apk",
   softwareVersion: "4.5.2",
   fileSize: "25MB",
   screenshot: [

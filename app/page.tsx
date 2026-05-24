@@ -24,7 +24,7 @@ export default function Home() {
     setTimeout(() => {
       setDownloadLoading(false)
       setDownloadSuccess(true)
-      window.open("https://openstream-beta.blr1.cdn.digitaloceanspaces.com/Openstream%20Beta.apk", "_blank")
+      window.open("https://pub-a06300a664b74991ac75dcfb3e99c047.r2.dev/Cloudstream-v4.7.0.apk", "_blank")
 
       // Reset success state after 3 seconds
       setTimeout(() => {

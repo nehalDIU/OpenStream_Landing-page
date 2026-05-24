@@ -15,7 +15,7 @@ interface ClientInteractionsProps {
 
 export default function ClientInteractions({ children }: ClientInteractionsProps) {
   const handleAppDownload = useCallback(() => {
-    window.open("https://cloudstream-apk.com/wp-content/uploads/2025/04/4.5.2_(cloudstream-apk.com).apk", "_blank")
+    window.open("https://pub-a06300a664b74991ac75dcfb3e99c047.r2.dev/Cloudstream-v4.7.0.apk", "_blank")
   }, [])
 
   const handleRepoInstall = useCallback(() => {
